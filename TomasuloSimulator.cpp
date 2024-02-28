@@ -326,6 +326,7 @@ int execute_instructions() {
 int write_regout_file() {
     // Implementation of writing the register output file
     // Return 0 on success, non-zero value on failure
+    return 0;
 }
 
 int write_traceinst_file() {
