@@ -320,7 +320,7 @@ int parse_memin(FILE* memin_file)
 int execute_instructions() {
     // Implementation of executing the instructions based on configurations and memory initialization
     // Return 0 on success, non-zero value on failure
-    return 0;
+    // return 0;
 }
 
 int write_regout_file() {
