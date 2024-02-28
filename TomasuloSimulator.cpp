@@ -326,16 +326,19 @@ int execute_instructions() {
 int write_regout_file() {
     // Implementation of writing the register output file
     // Return 0 on success, non-zero value on failure
+    return 0;
 }
 
 int write_traceinst_file() {
     // Implementation of writing the trace instruction file
     // Return 0 on success, non-zero value on failure
+    return 0;
 }
 
 int write_tracecdb_file() {
     // Implementation of writing the trace CDB file
     // Return 0 on success, non-zero value on failure
+    return 0;
 }
 
 void init_processor(processor_t* processor, configurations_t* configs, uint32_t* memin_data, size_t memin_size) {
