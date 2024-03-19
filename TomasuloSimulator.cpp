@@ -68,13 +68,17 @@ typedef struct configurations
 typedef struct {
     float* reg; // Array to store 16 single-precision floating-point registers
     uint32_t pc;   // Program Counter register
-    reservation_station_t* reservation_stations; // Dynamically allocated array of reservation stations
-    cdb_t cdb_add; // add Data Buses
-    cdb_t cdb_mul; // mul Data Buses
-    cdb_t cdb_div; // div Data Buses
+    reservation_station_t* add_reservation_stations; // Dynamically allocated array of reservation stations
+    reservation_station_t* mul_reservation_stations; // Dynamically allocated array of reservation stations
+    reservation_station_t* div_reservation_stations; // Dynamically allocated array of reservation stations
+    cdb_t* cdb_add; // add Data Buses
+    cdb_t* cdb_mul; // mul Data Buses
+    cdb_t* cdb_div; // div Data Buses
     uint32_t cycle;
     configurations_t conf;
-    unit_t* units; //  Dynamically allocated array of units
+    unit_t* add_units; //  Dynamically allocated array of units
+    unit_t* mul_units; //  Dynamically allocated array of units
+    unit_t* div_units; //  Dynamically allocated array of units
     instruction_t* instruction_que; // Array to store up to 16 instructions 
 } processor_t;
 
@@ -323,70 +327,162 @@ int execute_instructions() {
     return 0;
 }
 
-int write_regout_file() {
+int write_regout_file(FILE* regout_file) {
     // Implementation of writing the register output file
     // Return 0 on success, non-zero value on failure
     return 0;
 }
 
-int write_traceinst_file() {
+int write_traceinst_file(FILE* traceinst_file) {
     // Implementation of writing the trace instruction file
     // Return 0 on success, non-zero value on failure
     return 0;
 }
 
-int write_tracecdb_file() {
+int write_tracecdb_file(FILE* tracecdb_file) {
     // Implementation of writing the trace CDB file
     // Return 0 on success, non-zero value on failure
     return 0;
 }
 
-void init_processor(processor_t* processor, configurations_t* configs, uint32_t* memin_data, size_t memin_size) {
-    // Initialize processor state variables
-    processor->pc = 0;
-    
-    // Initialize registers based on configuration data
-    processor->reg = (float*)malloc(sizeof(float) * NUM_REGISTERS);
-    if (processor->reg == NULL) {
+void init_reservation_station_type(reservation_station_t* stations, int num_stations) {
+    for (int i = 0; i < num_stations; i++) {
+        stations[i].station_id = i;
+        stations[i].busy = 0;
+        stations[i].ins = 0;
+        stations[i].op = 0;
+        stations[i].vj = 0;
+        stations[i].vk = 0;
+        stations[i].qj = 0;
+        stations[i].qk = 0;
+    }
+}
+
+void init_reservation_stations(processor_t* processor, configurations_t* configs) {
+    // Initialize add reservation stations
+    processor->add_reservation_stations = init_reservation_stations_type(configs->add_nr_reservation);
+
+    // Initialize mul reservation stations
+    processor->mul_reservation_stations = init_reservation_stations_type(configs->mul_nr_reservation);
+
+    // Initialize div reservation stations
+    processor->div_reservation_stations = init_reservation_stations_type(configs->div_nr_reservation);
+}
+
+reservation_station_t* init_reservation_stations_type(int num_stations) {
+    reservation_station_t* stations = (reservation_station_t*)malloc(sizeof(reservation_station_t) * num_stations);
+    if (stations == NULL) {
+        // Handle memory allocation error
+        exit(EXIT_FAILURE);
+    }
+    init_reservation_station_type(stations, num_stations);
+    return stations;
+}
+
+void reg_init(processor_t *processor)
+{
+    processor->reg = (float *)malloc(sizeof(float) * NUM_REGISTERS);
+    if (processor->reg == NULL)
+    {
         // Handle memory allocation error
         exit(EXIT_FAILURE);
     }
     // Initialize registers to zero or other default values
-    for(int i=0;i<16;i++)
+    for (int i = 0; i < 16; i++)
     {
-        processor->reg[i]=float(i);
+        processor->reg[i] = float(i);
+    }
+}
+
+void init_cdb(cdb_t* cdb, int cdb_id) {
+    cdb->cdb_id = cdb_id;
+    cdb->busy = 0;
+    cdb->output = 0;
+}
+
+void cdb_init(processor_t* processor) {
+    // Initialize CDBs based on configuration data
+    cdb_t* add = (cdb_t*)malloc(sizeof(cdb_t));
+    cdb_t* mul = (cdb_t*)malloc(sizeof(cdb_t));
+    cdb_t* div = (cdb_t*)malloc(sizeof(cdb_t));
+    if (add == NULL || mul == NULL || div == NULL) {
+        // Handle memory allocation error
+        exit(EXIT_FAILURE);
+    }
+    init_cdb(add, ADD_ID);
+    init_cdb(mul, MUL_ID);
+    init_cdb(div, DIV_ID);
+    processor->cdb_add = add;
+    processor->cdb_mul = mul;
+    processor->cdb_div = div;
+}
+
+void ALU_unit_init(processor_t *processor, configurations_t *configs)
+{
+    processor->add_units = (unit_t *)malloc(sizeof(unit_t) * configs->add_nr_units);
+    processor->mul_units = (unit_t *)malloc(sizeof(unit_t) * configs->mul_nr_units);
+    processor->div_units = (unit_t *)malloc(sizeof(unit_t) * configs->div_nr_units);
+    if (processor->add_units == NULL || processor->mul_units == NULL || processor->div_units == NULL)
+    {
+        // Handle memory allocation error
+        exit(EXIT_FAILURE);
+    }
+}
+
+void instruction_queue_init(processor_t *processor)
+{
+    for (size_t i = 0; i < 16; i++)
+    {
+        processor->instruction_que[i].opcode = 0;
+        processor->instruction_que[i].dst = 0;
+        processor->instruction_que[i].src0 = 0;
+        processor->instruction_que[i].src1 = 0;
+        processor->instruction_que[i].cycle_issued = 0;
+        processor->instruction_que[i].cycle_execute_start = 0;
+        processor->instruction_que[i].cycle_execute_end = 0;
+        processor->instruction_que[i].cycle_cdb = 0;
+    }
+}
+
+void init_processor(processor_t *processor, configurations_t *configs, uint32_t *memin_data, size_t memin_size)
+{
+    // Initialize processor state variables
+    processor->cycle = 0;
+    processor->pc = 0;
+    processor->conf = *configs;
+    processor->instruction_que = (instruction_t*)malloc(sizeof(instruction_t) * 16);
+    if (processor->instruction_que == NULL) {
+        // Handle memory allocation error
+        exit(EXIT_FAILURE);
     }
     // Initialize reservation stations based on configuration data
-    int num_reservation_stations = configs->add_nr_reservation + configs->mul_nr_reservation + configs->div_nr_reservation;
-    processor->reservation_stations = (reservation_station_t*)malloc(sizeof(reservation_station_t) * num_reservation_stations);
-    if (processor->reservation_stations == NULL) {
-        // Handle memory allocation error
-        exit(EXIT_FAILURE);
-    }
-    // Initialize reservation stations
-    for(int i=0;i<num_reservation_stations;i++)
-    {
-        //
-    }
+    init_reservation_stations(processor, configs);
+    // Initialize registers based on configuration data
+    reg_init(processor);
     // Initialize units based on configuration data
-    int num_units = configs->add_nr_units + configs->mul_nr_units + configs->div_nr_units;
-    processor->units = (unit_t*)malloc(sizeof(unit_t) * num_units);
-    if (processor->units == NULL) {
-        // Handle memory allocation error
-        exit(EXIT_FAILURE);
-    }
-    // Initialize CDBs
-    for(int i=0;i<num_reservation_stations;i++)
-    {
-        //
-    }
+    ALU_unit_init(processor, configs);
+    // Initialize CDBs based on configuration data
+    cdb_init(processor);
+    // initialize the instruction queue
+    instruction_queue_init(processor);
     // Copy data from memin_data to memory locations in the processor
+    for (size_t i = 0; i < memin_size; i++) {
+        processor->instruction_que[i].opcode = (memin_data[i] & 0x0f000000) >> 24;
+        processor->instruction_que[i].dst = (memin_data[i] & 0x00f00000) >> 20;
+        processor->instruction_que[i].src0 = (memin_data[i] & 0x000f0000) >> 16;
+        processor->instruction_que[i].src1 = (memin_data[i] & 0x0000f000) >> 12;
+    }
+    // Additional initialization based on parsed data
+    // Copy data from memin_data to memory locations in the processor
+    
     
     // Additional initialization based on parsed data
     
     // Free memory allocated for configurations after initialization
     free(configs);
 }
+
+
 
 /*
  * Function: main
