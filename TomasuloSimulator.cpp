@@ -532,7 +532,30 @@ void init_processor(processor_t *processor, configurations_t *configs)
     instruction_queue_init(processor);
 }
 
-void fetch_instructions(processor_t *processor)
+// Function to read the next row from the file
+char* getNextRow(FILE *file) {
+    char *buffer = (char*)malloc(MAX_FILE_LINE_LEN * sizeof(char));
+
+    if (fgets(buffer, MAX_FILE_LINE_LEN, file) != NULL) {
+        return buffer;
+    } else {
+        free(buffer);
+        return NULL;
+    }
+}
+void insert_raw_instruction(instruction_t &inst, char *row, processor_t *processor)
+{
+    inst.raw_instruction = strtol(row, NULL, 16);
+    inst.opcode = (inst.raw_instruction & 0x0f000000) >> 24;
+    inst.dst = (inst.raw_instruction & 0x00f00000) >> 20;
+    inst.src0 = (inst.raw_instruction & 0x000f0000) >> 16;
+    inst.src1 = (inst.raw_instruction & 0x0000f000) >> 12;
+    inst.pc = processor->pc;
+    processor->pc++;
+    processor->instruction_que[processor->instruction_que_size] = inst;
+    processor->instruction_que_size++;
+}
+void fetch_instructions(processor_t *processor, FILE *file)
 {
     instruction_t first_instruction, second_instruction;
     uint8_t instructions_to_copy = 0;
@@ -548,6 +571,17 @@ void fetch_instructions(processor_t *processor)
     for (int i = 0; i < instructions_to_copy; i++)
     {
         // Fetch the next instruction from the memory
+        char *row = getNextRow(file);
+        if (row == NULL)
+        {
+            // No more instructions to fetch
+            break;
+        }
+        // Parse the instruction and store it in the instruction queue
+        if(i==0)
+        insert_raw_instruction(first_instruction, row, processor);
+        else
+        insert_raw_instruction(second_instruction, row, processor);
     }
 
     // memcpy(processor->instruction_que + processor->instruction_que_size, instructions, instructions_to_copy);
@@ -618,21 +652,21 @@ void issue_instructions_to_reservation_station(processor_t *processor, uint32_t 
     instructions_to_issue = (processor->instruction_que_size == 1) ? 1 : 2;
     for (int i = 0; i < instructions_to_issue; i++)
     {
-        instruction_t *first_instruction = get_active_instruction(processor->instruction_que);
-        int opcode = first_instruction->opcode;
+        instruction_t *inst = get_active_instruction(processor->instruction_que);
+        int opcode = inst->opcode;
         reservation_station_t *reserve = free_reservation_station(processor, opcode);
         if (reserve != NULL)
         {
             reserve->busy = 1;
-            reserve->ins = first_instruction->pc;
+            reserve->ins = inst->pc;
             reserve->op = opcode;
-            reserve->vj = processor->reg[first_instruction->src0].v_i;
-            reserve->vk = processor->reg[first_instruction->src1].v_i;
+            reserve->vj = processor->reg[inst->src0].v_i;
+            reserve->vk = processor->reg[inst->src1].v_i;
             reserve->qj = NULL; // todo add the correct value
             reserve->qk = NULL; // todo add the correct value
             reserve->start_cycle = cycle;
-            first_instruction->reservation_station = reserve;
-            first_instruction->cycle_issued = cycle;
+            inst->reservation_station = reserve;
+            inst->cycle_issued = cycle;
             processor->instruction_que_size--;
         }
     }
@@ -790,11 +824,11 @@ void write_cdb(processor_t *processor, uint32_t cycle)
     }
 }
 
-int run_processor(processor_t *processor)
+int run_processor(processor_t *processor,FILE *memin)
 {
     uint32_t cycle = 0;
     init_processor(processor, &processor->conf); // probebly need to be in the main
-    fetch_instructions(processor);
+    fetch_instructions(processor,memin);
     cycle++;
     while (1)
     {
@@ -836,7 +870,7 @@ int run_processor(processor_t *processor)
         //assign_instruction_to_reservation_station(processor, second_instruction);
 
         set_pending_register_to_busy(processor->reg);
-        fetch_instructions(processor);
+        fetch_instructions(processor,memin);
         ++cycle;
     }
 
@@ -869,7 +903,7 @@ void execute(processor_t *processor, instruction_t instruction)
     case HALT_OPCODE:
         processor->halted = 1;
     default:
-        exit(10);
+        exit(10);//10?
         break;
     }
 }
