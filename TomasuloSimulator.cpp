@@ -11,65 +11,66 @@
 #define MAX_COMMAND_LEN 8
 #define MAX_CONFIG_FILE_SIZE 1024
 #define MEMIN_INSTRUCTIONS_NUM 4096
-#define MAX_MEMIN_FILE_SIZE (10*MEMIN_INSTRUCTIONS_NUM)
+#define MAX_MEMIN_FILE_SIZE (10 * MEMIN_INSTRUCTIONS_NUM)
 #define MAX_FILE_LINE_LEN 50
 #define NUM_REGISTERS 16
-#define ADD_ID 0
-#define MUL_ID 1
-#define DIV_ID 2
 #define ADD_OPCODE 2
 #define SUB_OPCODE 3
 #define MUL_OPCODE 4
 #define DIV_OPCODE 5
-#define HALT_OPCODE 6 
+#define HALT_OPCODE 6
 #define INSTRUCTION_QUEUE_SIZE 16
 
-typedef struct {
-    uint32_t cdb_id;        // Identifier for the CDB (ADD, MUL, DIV)
-    uint32_t output;        // output transmitted on the CDB
-    uint32_t busy;          // Flag indicating if the station is busy (1) or available (0)
-    uint32_t cycle;         // The cycle in which the data is being delivered
-    uint32_t pc;            // The program counter of the instruction whose execution resulted in writing to the CDB
+typedef struct
+{
+    uint32_t cdb_id; // Identifier for the CDB (ADD, MUL, DIV)
+    uint32_t output; // output transmitted on the CDB
+    uint32_t busy;   // Flag indicating if the station is busy (1) or available (0)
+    uint32_t cycle;  // The cycle in which the data is being delivered
+    uint32_t pc;     // The program counter of the instruction whose execution resulted in writing to the CDB
 } cdb_t;
 
-typedef struct {
-    uint32_t cdb_id;        // Identifier for the CDB (e.g., ADD, MUL, DIV)
-    uint32_t tag;           // number of the CDB in the group
-    uint32_t busy;          // Flag indicating if the station is busy (1) or available (0)
-    uint32_t pc;            // The program counter of instruction the unit is executing
-    uint32_t delay;         // Cost
+typedef struct
+{
+    uint32_t cdb_id; // Identifier for the CDB (e.g., ADD, MUL, DIV)
+    uint32_t tag;    // number of the CDB in the group
+    uint32_t busy;   // Flag indicating if the station is busy (1) or available (0)
+    uint32_t pc;     // The program counter of instruction the unit is executing
+    uint32_t delay;  // Cost
 } unit_t;
 
-typedef struct {
-    uint32_t station_id;    // Identifier for the reservation station
-    uint32_t busy;          // Flag indicating if the station is busy (1) or available (0)
-    uint32_t ins;           // instruction number
-    uint32_t op;            // Operation to be performed (e.g., ADD, MUL, DIV)
-    uint32_t vj;            // Value of operand j
-    uint32_t vk;            // Value of operand k
-    uint32_t qj;            // Reservation station producing Vj
-    uint32_t qk;            // Reservation station producing Vk
-    uint32_t start_cycle;   // The cycle in which the current instruction has started to execute. Relevant only if busy=1. If value is 0, the instruction has not started yet.
+typedef struct
+{
+    uint32_t station_id;  // Identifier for the reservation station
+    uint32_t busy;        // Flag indicating if the station is busy (1) or available (0)
+    uint32_t ins;         // instruction number
+    uint32_t op;          // Operation to be performed (e.g., ADD, MUL, DIV)
+    uint32_t vj;          // Value of operand j
+    uint32_t vk;          // Value of operand k
+    uint32_t qj;          // Reservation station producing Vj
+    uint32_t qk;          // Reservation station producing Vk
+    uint32_t start_cycle; // The cycle in which the current instruction has started to execute. Relevant only if busy=1. If value is 0, the instruction has not started yet.
 } reservation_station_t;
 
-typedef struct {
-    long raw_instruction;       // The instruction as it appears in the memin file
-    uint32_t opcode;            // Opcode of the instruction
-    uint32_t dst;               // Destination register index
-    uint32_t src0;              // Source register 0 index
-    uint32_t src1;              // Source register 1 index
-    uint32_t pc;                // The program counter of the instruction
-    uint32_t tag;               // The tag of the station the instruction was executed in
-    uint32_t cycle_issued;      // Cycle when the instruction was issued
-    uint32_t cycle_execute_start; // Cycle when execution of the instruction started
-    uint32_t cycle_execute_end; // Cycle when execution of the instruction ended
-    uint32_t cycle_cdb;         // Cycle when the result was written to the Common Data 
-    reservation_station_t *reservation_station;     // Pointer to the reservation station the instruction is waiting in
-                                                    // NULL if unassigned
+typedef struct
+{
+    long raw_instruction;                       // The instruction as it appears in the memin file
+    uint32_t opcode;                            // Opcode of the instruction
+    uint32_t dst;                               // Destination register index
+    uint32_t src0;                              // Source register 0 index
+    uint32_t src1;                              // Source register 1 index
+    uint32_t pc;                                // The program counter of the instruction
+    uint32_t tag;                               // The tag of the station the instruction was executed in
+    uint32_t cycle_issued;                      // Cycle when the instruction was issued
+    uint32_t cycle_execute_start;               // Cycle when execution of the instruction started
+    uint32_t cycle_execute_end;                 // Cycle when execution of the instruction ended
+    uint32_t cycle_cdb;                         // Cycle when the result was written to the Common Data
+    reservation_station_t *reservation_station; // Pointer to the reservation station the instruction is waiting in
+                                                // NULL if unassigned
 } instruction_t;
 
 typedef struct configurations
-{ //why long?
+{ // why long?
     long add_nr_units;
     long mul_nr_units;
     long div_nr_units;
@@ -81,29 +82,31 @@ typedef struct configurations
     long div_delay;
 } configurations_t;
 
-typedef struct {
-    float* reg; // Array to store 16 single-precision floating-point registers
-    uint32_t pc;   // Program Counter register
-    reservation_station_t* add_reservation_stations; // Dynamically allocated array of reservation stations
-    reservation_station_t* mul_reservation_stations; // Dynamically allocated array of reservation stations
-    reservation_station_t* div_reservation_stations; // Dynamically allocated array of reservation stations
-    cdb_t* cdb_add; // add Data Buses
-    cdb_t* cdb_mul; // mul Data Buses
-    cdb_t* cdb_div; // div Data Buses
+typedef struct
+{
+    register_t *reg;                                 // Dynamically allocated array of registers
+    uint32_t pc;                                     // Program Counter register
+    reservation_station_t *add_reservation_stations; // Dynamically allocated array of reservation stations
+    reservation_station_t *mul_reservation_stations; // Dynamically allocated array of reservation stations
+    reservation_station_t *div_reservation_stations; // Dynamically allocated array of reservation stations
+    cdb_t *cdb_add;                                  // add Data Buses
+    cdb_t *cdb_mul;                                  // mul Data Buses
+    cdb_t *cdb_div;                                  // div Data Buses
     uint32_t cycle;
     configurations_t conf;
-    unit_t* add_units; //  Dynamically allocated array of units
-    unit_t* mul_units; //  Dynamically allocated array of units
-    unit_t* div_units; //  Dynamically allocated array of units
-    instruction_t* instruction_que; // Array to store up to 16 instructions 
+    unit_t *add_units;              //  Dynamically allocated array of units
+    unit_t *mul_units;              //  Dynamically allocated array of units
+    unit_t *div_units;              //  Dynamically allocated array of units
+    instruction_t *instruction_que; // Array to store up to 16 instructions
     uint8_t instruction_que_size;   // Indicates the current instruction queue size.
     uint8_t halted;                 // Value of 1 means that the halt command was executed. Value of 0 otherwise.
 } processor_t;
 
-typedef struct {
-    float v_i;      // The stable value of the reqister
-    uint32_t q_i;   // The id of the station that the register is waiting for
-    uint8_t busy;   // 0 if value is valid, 1 if going to be "2" next cycle, 2 if waiting for a reservation station
+typedef struct
+{
+    float v_i;    // The stable value of the reqister
+    uint32_t q_i; // The id of the station that the register is waiting for
+    uint8_t busy; // 0 if value is valid, 1 if going to be "2" next cycle, 2 if waiting for a reservation station
 } register_t;
 
 // Configuation names as they appear in the configuration input file
@@ -116,10 +119,9 @@ const char CONFIGS[NUM_CONFIGS][MAX_CONFIG_LEN] = {
     "div_nr_reservation",
     "add_delay",
     "mul_delay",
-    "div_delay"
-};
+    "div_delay"};
 
-void init_configs(configurations_t* configurations)
+void init_configs(configurations_t *configurations)
 {
     configurations->add_nr_units = -1;
     configurations->mul_nr_units = -1;
@@ -132,68 +134,20 @@ void init_configs(configurations_t* configurations)
     configurations->div_delay = -1;
 }
 
-void init_CDB(cdb_t* cdb, uint32_t cdb_id, uint32_t tag)        // output transmitted on the CDB
+void init_an_instruction(instruction_t *o_instruction)
 {
-    //
-}
-
-void init_instruction(instruction_t* o_instruction)
-{
-    // TODO init all fields
-}
-
-void init_processor(processor_t* processor, configurations_t* configs, uint32_t* memin_data, size_t memin_size) {
-    // Initialize processor state variables
-    
-    // Initialize registers based on configuration data
-    // TODO init correctly according to register_t
-    // TODO why use malloc?
-    processor->reg = (float*)malloc(sizeof(float) * NUM_REGISTERS);
-    if (processor->reg == NULL) {
-        // Handle memory allocation error
-        exit(EXIT_FAILURE);
-    }
-    // Initialize registers to zero or other default values
-    for (int i = 0; i < 16; i++)
-    {
-        processor->reg[i].v_i = float(i);
-    }
-    // Initialize reservation stations based on configuration data
-    int num_reservation_stations = configs->add_nr_reservation + configs->mul_nr_reservation + configs->div_nr_reservation;
-    processor->reservation_stations = (reservation_station_t*)malloc(sizeof(reservation_station_t) * num_reservation_stations);
-    if (processor->reservation_stations == NULL) {
-        // Handle memory allocation error
-        exit(EXIT_FAILURE);
-    }
-    // Initialize reservation stations
-    for (int i = 0; i < num_reservation_stations; i++)
-    {
-        // TODO first station_id should be 1, not 0.
-    }
-    // Initialize units based on configuration data
-    int num_units = configs->add_nr_units + configs->mul_nr_units + configs->div_nr_units;
-    processor->units = (unit_t*)malloc(sizeof(unit_t) * num_units);
-    if (processor->units == NULL) {
-        // Handle memory allocation error
-        exit(EXIT_FAILURE);
-    }
-    // Initialize CDBs
-    for (int i = 0; i < num_reservation_stations; i++)
-    {
-        //
-    }
-    // Copy data from memin_data to memory locations in the processor
-
-    // Additional initialization based on parsed data
-
-    // Free memory allocated for configurations after initialization
-    // TODO what memory was allocated??
-    free(configs);
-}
-
-void init_reservation_station(reservation_station_t* reservation_station)
-{
-    // TODO
+    o_instruction->raw_instruction = 0;
+    o_instruction->opcode = 0;
+    o_instruction->dst = 0;
+    o_instruction->src0 = 0;
+    o_instruction->src1 = 0;
+    o_instruction->pc = 0;
+    o_instruction->tag = 0;
+    o_instruction->cycle_issued = 0;
+    o_instruction->cycle_execute_start = 0;
+    o_instruction->cycle_execute_end = 0;
+    o_instruction->cycle_cdb = 0;
+    o_instruction->reservation_station = NULL;
 }
 
 /*
@@ -230,10 +184,10 @@ void print_configs(const configurations_t configurations)
  *  - 0: Successful parsing of the configuration file.
  *  - Non-zero: Indicates an error during memory allocation, file reading, or parsing.
  */
-int parse_configs(FILE* config_file, configurations_t* configurations)
+int parse_configs(FILE *config_file, configurations_t *configurations)
 {
-    char* file_contents_allocated_buffer = (char*)malloc(MAX_CONFIG_FILE_SIZE);
-    char* file_contents = file_contents_allocated_buffer;
+    char *file_contents_allocated_buffer = (char *)malloc(MAX_CONFIG_FILE_SIZE);
+    char *file_contents = file_contents_allocated_buffer;
     if (file_contents == NULL)
     {
         printf("Failed to allocate!\n");
@@ -241,7 +195,7 @@ int parse_configs(FILE* config_file, configurations_t* configurations)
     }
     memset(file_contents, 0, MAX_CONFIG_FILE_SIZE);
 
-    char line[MAX_FILE_LINE_LEN] = { 0 };
+    char line[MAX_FILE_LINE_LEN] = {0};
 
     long value = 0;
     size_t line_len = 0;
@@ -338,10 +292,10 @@ int parse_configs(FILE* config_file, configurations_t* configurations)
  *  - 0: Successful parsing of the memory initialization file.
  *  - Non-zero: Indicates an error during memory allocation, file reading, or parsing.
  */
-int parse_memin(FILE* memin_file, instruction_t* instructions)
+int parse_memin(FILE *memin_file, instruction_t *instructions)
 {
-    char* file_contents_allocated_buffer = (char*)malloc(MAX_MEMIN_FILE_SIZE);
-    char* file_contents = file_contents_allocated_buffer;
+    char *file_contents_allocated_buffer = (char *)malloc(MAX_MEMIN_FILE_SIZE);
+    char *file_contents = file_contents_allocated_buffer;
 
     if (file_contents == NULL)
     {
@@ -350,7 +304,7 @@ int parse_memin(FILE* memin_file, instruction_t* instructions)
     }
     memset(file_contents, 0, MAX_MEMIN_FILE_SIZE);
 
-    char line[MAX_FILE_LINE_LEN] = { 0 };
+    char line[MAX_FILE_LINE_LEN] = {0};
 
     long raw_instruction = 0;
     uint8_t opcode = 0;
@@ -408,34 +362,39 @@ int parse_memin(FILE* memin_file, instruction_t* instructions)
     return 0;
 }
 
-int execute_instructions() {
+int execute_instructions()
+{
     // Implementation of executing the instructions based on configurations and memory initialization
     // Return 0 on success, non-zero value on failure
     return 0;
 }
 
-int write_regout_file(FILE* regout_file) {
+int write_regout_file(FILE *regout_file)
+{
     // Implementation of writing the register output file
     // Return 0 on success, non-zero value on failure
     return 0;
-
 }
 
-int write_traceinst_file(FILE* traceinst_file) {
+int write_traceinst_file(FILE *traceinst_file)
+{
     // Implementation of writing the trace instruction file
     // Return 0 on success, non-zero value on failure
     return 0;
     return 0;
 }
 
-int write_tracecdb_file(FILE* tracecdb_file) {
+int write_tracecdb_file(FILE *tracecdb_file)
+{
     // Implementation of writing the trace CDB file
     // Return 0 on success, non-zero value on failure
     return 0;
 }
 
-void init_reservation_station_type(reservation_station_t* stations, int num_stations) {
-    for (int i = 0; i < num_stations; i++) {
+void init_reservation_station_type(reservation_station_t *stations, int num_stations)
+{
+    for (int i = 0; i < num_stations; i++)
+    {
         stations[i].station_id = i;
         stations[i].busy = 0;
         stations[i].ins = 0;
@@ -444,23 +403,25 @@ void init_reservation_station_type(reservation_station_t* stations, int num_stat
         stations[i].vk = 0;
         stations[i].qj = 0;
         stations[i].qk = 0;
+        stations[i].start_cycle = 0;
     }
 }
 
-void init_reservation_stations(processor_t* processor, configurations_t* configs) {
+void init_reservation_stations(processor_t *processor, configurations_t *configs)
+{
     // Initialize add reservation stations
     processor->add_reservation_stations = init_reservation_stations_type(configs->add_nr_reservation);
-
     // Initialize mul reservation stations
     processor->mul_reservation_stations = init_reservation_stations_type(configs->mul_nr_reservation);
-
     // Initialize div reservation stations
     processor->div_reservation_stations = init_reservation_stations_type(configs->div_nr_reservation);
 }
 
-reservation_station_t* init_reservation_stations_type(int num_stations) {
-    reservation_station_t* stations = (reservation_station_t*)malloc(sizeof(reservation_station_t) * num_stations);
-    if (stations == NULL) {
+reservation_station_t *init_reservation_stations_type(int num_stations)
+{
+    reservation_station_t *stations = (reservation_station_t *)malloc(sizeof(reservation_station_t) * num_stations);
+    if (stations == NULL)
+    {
         // Handle memory allocation error
         exit(EXIT_FAILURE);
     }
@@ -470,7 +431,7 @@ reservation_station_t* init_reservation_stations_type(int num_stations) {
 
 void reg_init(processor_t *processor)
 {
-    processor->reg = (float *)malloc(sizeof(float) * NUM_REGISTERS);
+    processor->reg = (register_t *)malloc(sizeof(register_t) * NUM_REGISTERS);
     if (processor->reg == NULL)
     {
         // Handle memory allocation error
@@ -478,156 +439,34 @@ void reg_init(processor_t *processor)
     }
     // Initialize registers to zero or other default values
     for (int i = 0; i < 16; i++)
-void fetch_instructions(instruction_t* instructions, processor_t* processor)
+    {
+        processor->reg[i].v_i = 0;
+        processor->reg[i].q_i = 0;
+        processor->reg[i].busy = 0;
+    }
+}
+
+void init_cdb(cdb_t *cdb, int cdb_id)
 {
-    uint8_t instructions_to_copy = 0;
-
-    // Instruction queue is full - nothing to do
-    if (processor->instruction_que_size == INSTRUCTION_QUEUE_SIZE)
-    {
-        return;
-    }
-
-    if (processor->instruction_que_size == INSTRUCTION_QUEUE_SIZE - 1)
-    {
-        // Only one place in the instruction queue - fetch only one instruction
-        instructions_to_copy = 1;
-    }
-    else
-    {
-        // At least two places in the instruction queue - fetch two instructions
-        instructions_to_copy = 2;
-    }
-
-    memcpy(processor->instruction_que + processor->instruction_que_size, instructions, instructions_to_copy);
-    processor->instruction_que_size += instructions_to_copy;
-
-}
-
-void start_execution_if_possible(processor_t* processor, uint32_t cycle) {
-    // Implementation of executing the instructions based on configurations and memory initialization
-    // Return 0 on success, non-zero value on failure
-
-    // TODO where should we write the execute and write cdb cycles?
-    // the instruction queue gets renewed all the time, the processor only stores the reservation stations, the memin struct is already out of reach and it seems incorrect to store it there.
-    
-    // This function must be called on the clock cycle AFTER the issue of the instructions
-    uint32_t num_reservation_stations = processor->conf.add_nr_reservation + processor->conf.mul_nr_reservation + processor->conf.div_nr_reservation;
-    uint32_t num_execution_units = processor->conf.add_nr_units + processor->conf.mul_nr_units + processor->conf.div_nr_units;
-    
-    for (uint32_t i = 0; i < num_reservation_stations; ++i)
-    {
-        // make sure that the station is not busy and not waiting for any other instruction and not already started execution
-        if (processor->reservation_stations[i].busy != 0 || 
-            processor->reservation_stations[i].qj != 0 || 
-            processor->reservation_stations[i].qk != 0 ||
-            processor->reservation_stations[i].start_cycle != 0)
-        {
-            continue;
-        }
-        
-        for (uint32_t j = 0; j < num_execution_units; j++)
-        {
-            if (processor->units[j].busy == 1)
-            {
-                continue;
-            }
-            
-            uint32_t opcode = processor->reservation_stations[i].op;
-            uint32_t unit_id = processor->units[j].cdb_id;
-            if (
-                !((opcode == ADD_OPCODE || opcode == SUB_OPCODE) && unit_id == ADD_ID) &&
-                !(opcode == MUL_OPCODE && unit_id == MUL_ID) &&
-                !(opcode == DIV_OPCODE && unit_id == DIV_ID)
-                )
-            {
-                continue;
-            }
-            
-            processor->units[j].busy = 1;
-        }
-        
-        processor->reservation_stations[i].start_cycle = cycle;
-    }
-}
-
-uint8_t execute_task_if_finished_and_get_result(uint32_t cycle, reservation_station_t reservation_station, configurations_t conf, float* result)
-{
-    long delay = 0;
-    
-    switch (reservation_station.op)
-    {
-    case ADD_OPCODE:
-        *result = reservation_station.vj + reservation_station.vk;
-        delay = conf.add_delay;
-        break;
-    case SUB_OPCODE:
-        *result = reservation_station.vj - reservation_station.vk;
-        delay = conf.add_delay;
-        break;
-    case MUL_OPCODE:
-        *result = reservation_station.vj * reservation_station.vk;
-        delay = conf.mul_delay;
-        break;
-    case DIV_OPCODE:
-        if (reservation_station.vk == 0)
-        {
-            printf("Division by zero!\n");
-            exit(-1);
-        }
-        *result = reservation_station.vj / reservation_station.vk;
-        delay = conf.div_delay;
-        break;
-    case HALT_OPCODE:
-        //TODO
-        // *halted = 1; // ???
-        printf("\n\nTODO!\n\n");
-        exit(-2);
-    default:
-        exit(11);
-        break;
-    }
-
-    return (cycle == reservation_station.start_cycle + delay) ? 1 : 0;
-}
-
-void write_cdb(processor_t *processor, uint32_t cycle)
-{
-    uint32_t nr_reservation = 
-        processor->conf.add_nr_reservation + 
-        processor->conf.mul_nr_reservation + 
-        processor->conf.div_nr_reservation;
-    uint32_t nr_units =
-        processor->conf.add_nr_units +
-        processor->conf.mul_nr_units +
-        processor->conf.div_nr_units;
-    
-    float result = 0;
-    
-    for (uint32_t i = 0; i < nr_reservation; ++i)
-    {
-        processor->reg[i] = float(i);
-    }
-}
-
-void init_cdb(cdb_t* cdb, int cdb_id) {
     cdb->cdb_id = cdb_id;
     cdb->busy = 0;
     cdb->output = 0;
 }
 
-void cdb_init(processor_t* processor) {
+void cdb_init(processor_t *processor)
+{
     // Initialize CDBs based on configuration data
-    cdb_t* add = (cdb_t*)malloc(sizeof(cdb_t));
-    cdb_t* mul = (cdb_t*)malloc(sizeof(cdb_t));
-    cdb_t* div = (cdb_t*)malloc(sizeof(cdb_t));
-    if (add == NULL || mul == NULL || div == NULL) {
+    cdb_t *add = (cdb_t *)malloc(sizeof(cdb_t));
+    cdb_t *mul = (cdb_t *)malloc(sizeof(cdb_t));
+    cdb_t *div = (cdb_t *)malloc(sizeof(cdb_t));
+    if (add == NULL || mul == NULL || div == NULL)
+    {
         // Handle memory allocation error
         exit(EXIT_FAILURE);
     }
-    init_cdb(add, ADD_ID);
-    init_cdb(mul, MUL_ID);
-    init_cdb(div, DIV_ID);
+    init_cdb(add, ADD_OPCODE);
+    init_cdb(mul, MUL_OPCODE);
+    init_cdb(div, DIV_OPCODE);
     processor->cdb_add = add;
     processor->cdb_mul = mul;
     processor->cdb_div = div;
@@ -643,6 +482,14 @@ void ALU_unit_init(processor_t *processor, configurations_t *configs)
         // Handle memory allocation error
         exit(EXIT_FAILURE);
     }
+    for (int i = 0; i < configs->add_nr_units; i++)
+    {
+        processor->add_units[i].busy = 0;
+        processor->add_units[i].delay = configs->add_delay;
+        processor->add_units[i].pc = 0;
+        processor->add_units[i].tag = 0;
+        processor->add_units[i].cdb_id = ADD_OPCODE;
+    }
 }
 
 void instruction_queue_init(processor_t *processor)
@@ -657,17 +504,19 @@ void instruction_queue_init(processor_t *processor)
         processor->instruction_que[i].cycle_execute_start = 0;
         processor->instruction_que[i].cycle_execute_end = 0;
         processor->instruction_que[i].cycle_cdb = 0;
+        processor->instruction_que[i].reservation_station = NULL;
     }
 }
 
-void init_processor(processor_t *processor, configurations_t *configs, uint32_t *memin_data, size_t memin_size)
+void init_processor(processor_t *processor, configurations_t *configs)
 {
     // Initialize processor state variables
     processor->cycle = 0;
     processor->pc = 0;
     processor->conf = *configs;
-    processor->instruction_que = (instruction_t*)malloc(sizeof(instruction_t) * 16);
-    if (processor->instruction_que == NULL) {
+    processor->instruction_que = (instruction_t *)malloc(sizeof(instruction_t) * 16);
+    if (processor->instruction_que == NULL)
+    {
         // Handle memory allocation error
         exit(EXIT_FAILURE);
     }
@@ -681,152 +530,120 @@ void init_processor(processor_t *processor, configurations_t *configs, uint32_t 
     cdb_init(processor);
     // initialize the instruction queue
     instruction_queue_init(processor);
-    // Copy data from memin_data to memory locations in the processor
-    for (size_t i = 0; i < memin_size; i++) {
-        processor->instruction_que[i].opcode = (memin_data[i] & 0x0f000000) >> 24;
-        processor->instruction_que[i].dst = (memin_data[i] & 0x00f00000) >> 20;
-        processor->instruction_que[i].src0 = (memin_data[i] & 0x000f0000) >> 16;
-        processor->instruction_que[i].src1 = (memin_data[i] & 0x0000f000) >> 12;
-    }
-    // Additional initialization based on parsed data
-    // Copy data from memin_data to memory locations in the processor
-    
-    
-    // Additional initialization based on parsed data
-    
-    // Free memory allocated for configurations after initialization
-    free(configs);
-        if (processor->reservation_stations[i].busy == 0 || processor->reservation_stations[i].start_cycle == 0)
-        {
-            continue;
-        }
-
-        if (execute_task_if_finished_and_get_result(cycle, processor->reservation_stations[i], processor->conf, &result) == 0)
-        {
-            continue;
-        }
-        
-        // Go over awaiting reservation stations and update with result
-        for (uint32_t j = 0; j < nr_reservation; ++j)
-        {
-            if (i == j)
-            {
-                continue;
-            }
-
-            if (processor->reservation_stations[j].qj == processor->reservation_stations[i].station_id)
-            {
-                processor->reservation_stations[j].vj = result;
-            }
-
-            if (processor->reservation_stations[j].qk == processor->reservation_stations[i].station_id)
-            {
-                processor->reservation_stations[j].vk = result;
-            }
-        }
-
-        // Go over awaiting registers and update with result
-        for (uint32_t k = 0; k < NUM_REGISTERS; k++)
-        {
-            if (processor->reg[k].q_i == processor->reservation_stations[i].station_id)
-            {
-                processor->reg[k].v_i = result;
-            }
-             
-        }
-
-        // TODO where to store this?
-        instruction_t instruction;
-        instruction.cycle_cdb = cycle;
-
-        // mark execution unit as not busy
-        for (uint32_t j = 0; j < nr_units; j++)
-        {
-            if (processor->reservation_stations[i].ins == processor->units[j].pc)
-            {
-                processor->units[j].busy = 0;
-            }
-        }
-
-        // empty reservation station
-        processor->reservation_stations[i].busy = 0;
-        init_reservation_station(&processor->reservation_stations[i]);
-    }
-
 }
 
-// TODO probably irrelevant
-void check_finished_tasks(processor_t processor, uint32_t cycle)
+void fetch_instructions(processor_t *processor)
 {
-    uint8_t *add_stations_finished = (uint8_t*)malloc(processor.conf.add_nr_reservation * sizeof(uint8_t));
-    uint8_t *mul_stations_finished = (uint8_t*)malloc(processor.conf.mul_nr_reservation * sizeof(uint8_t));
-    uint8_t *div_stations_finished = (uint8_t*)malloc(processor.conf.div_nr_reservation * sizeof(uint8_t));
+    instruction_t first_instruction, second_instruction;
+    uint8_t instructions_to_copy = 0;
+    init_an_instruction(&first_instruction);
+    init_an_instruction(&second_instruction);
 
-    // create a list of size of all stations and for each maintain a list whether it's done or not, so you can check what stations/registers are waiting for it.
-    // don't forget to manage memory correctly
-    
-    // TODO loop once! write less code by checking the current instrution/type of the reservation station and doing switch-case
-    // and assigning the delay (and other distignguishing params) there instead of inside the loop
-
-    // Iterate over add stations
-    for (uint32_t i = 0; i < processor.conf.add_nr_reservation; ++i)
+    // Instruction queue is full - nothing to do
+    if (processor->instruction_que_size == INSTRUCTION_QUEUE_SIZE)
     {
-        if (processor.reservation_stations[i].busy == 0 || processor.reservation_stations[i].start_cycle == 0)
-        {
-            continue;
-        }
-        
-        if (cycle == processor.reservation_stations[i].start_cycle + processor.conf.add_delay)
-        {
-            add_stations_finished[i] = 1;
-        }
-
-        if (processor.reservation_stations[i].busy)
-        {
-
-        }
+        return;
     }
-    
-    // Iterate over mul stations
-    for (uint32_t i = processor.conf.add_nr_reservation; i < processor.conf.add_nr_reservation + processor.conf.mul_nr_reservation; ++i)
+    instructions_to_copy = (processor->instruction_que_size == INSTRUCTION_QUEUE_SIZE - 1) ? 1 : 2;
+    for (int i = 0; i < instructions_to_copy; i++)
     {
-        if (processor.reservation_stations[i].busy == 0 || processor.reservation_stations[i].start_cycle == 0)
-        {
-            continue;
-        }
-
-        if (cycle == processor.reservation_stations[i].start_cycle + processor.conf.mul_delay)
-        {
-            mul_stations_finished[i] = 1;
-        }
-
-        if (processor.reservation_stations[i].busy)
-        {
-
-        }
-    }
-    
-    // Iterate over div stations
-    for (uint32_t i = processor.conf.add_nr_reservation + processor.conf.mul_nr_reservation; i < processor.conf.add_nr_reservation + processor.conf.mul_nr_reservation + processor.conf.div_nr_reservation; ++i)
-    {
-        if (processor.reservation_stations[i].busy == 0 || processor.reservation_stations[i].start_cycle == 0)
-        {
-            continue;
-        }
-
-        if (cycle == processor.reservation_stations[i].start_cycle + processor.conf.div_delay)
-        {
-            div_stations_finished[i] = 1;
-        }
-
-        if (processor.reservation_stations[i].busy)
-        {
-
-        }
+        // Fetch the next instruction from the memory
     }
 
+    // memcpy(processor->instruction_que + processor->instruction_que_size, instructions, instructions_to_copy);
+    // processor->instruction_que_size += instructions_to_copy;
 }
 
+reservation_station_t *free_reservation_station_type(reservation_station_t *stations, int num_stations)
+{
+    for (int i = 0; i < num_stations; i++)
+    {
+        if (stations[i].busy == 0)
+        {
+            return &stations[i];
+        }
+    }
+    return NULL;
+}
+
+reservation_station_t *free_reservation_station(processor_t *processor, int opcode)
+{
+    if (opcode == ADD_OPCODE)
+    {
+        return free_reservation_station_type(processor->add_reservation_stations, processor->conf.add_nr_reservation);
+    }
+    else if (opcode == MUL_OPCODE)
+    {
+        return free_reservation_station_type(processor->mul_reservation_stations, processor->conf.mul_nr_reservation);
+    }
+    else if (opcode == DIV_OPCODE)
+    {
+        return free_reservation_station_type(processor->div_reservation_stations, processor->conf.div_nr_reservation);
+    }
+    else
+    {
+        // Handle invalid opcode
+        exit(EXIT_FAILURE);
+    }
+}
+
+instruction_t *get_active_instruction(instruction_t *instruction_que)
+{
+    instruction_t *active_instruction = NULL;
+    for (int i = 0; i < 16; i++)
+    {
+        if (instruction_que[i].reservation_station != NULL)
+        {
+            return &instruction_que[i];
+        }
+    }
+    return NULL;
+}
+void issue_instructions_to_reservation_station(processor_t *processor, uint32_t cycle)
+{
+    // Get instrtucions from queue to the reservation stations, if possible, and mark the newly occupied reservation stations as busy.
+    // Also, write the station id of reservation station inside the instruction
+    // After issuing at most 2 instructions, reorganize the instruction queue
+    if (processor == NULL)
+    {
+        printf("try_to_issue_instructions: Got NULL!\n");
+        exit(-1);
+    }
+    // if there are no instructions to issue
+    if (processor->instruction_que_size == 0)
+    {
+        return;
+    }
+    int instructions_to_issue = 0;
+    instructions_to_issue = (processor->instruction_que_size == 1) ? 1 : 2;
+    for (int i = 0; i < instructions_to_issue; i++)
+    {
+        instruction_t *first_instruction = get_active_instruction(processor->instruction_que);
+        int opcode = first_instruction->opcode;
+        reservation_station_t *reserve = free_reservation_station(processor, opcode);
+        if (reserve != NULL)
+        {
+            reserve->busy = 1;
+            reserve->ins = first_instruction->pc;
+            reserve->op = opcode;
+            reserve->vj = processor->reg[first_instruction->src0].v_i;
+            reserve->vk = processor->reg[first_instruction->src1].v_i;
+            reserve->qj = NULL; // todo add the correct value
+            reserve->qk = NULL; // todo add the correct value
+            reserve->start_cycle = cycle;
+            first_instruction->reservation_station = reserve;
+            first_instruction->cycle_issued = cycle;
+            processor->instruction_que_size--;
+        }
+    }
+
+    //??? Update instruction queue by moving the next instructions to the beginning of the queue and updating the correct size??
+    memmove(processor->instruction_que, processor->instruction_que + 1, INSTRUCTION_QUEUE_SIZE - 1);
+    processor->instruction_que_size -= 1;
+    memset(processor->instruction_que + processor->instruction_que_size, 0, 1);
+}
+
+// TODO: this function is not used
 void get_reservation_stations_indices_by_opcode(uint32_t opcode, configurations_t configurations, uint32_t *o_start_index, uint32_t *o_end_index)
 {
     switch (opcode)
@@ -852,66 +669,8 @@ void get_reservation_stations_indices_by_opcode(uint32_t opcode, configurations_
     }
 }
 
-void issue_instructions(processor_t* processor, instruction_t* o_first_instruction, instruction_t* o_second_instruction, const uint32_t current_cycle)
-    // Get instrtucions from queue to the reservation stations, if possible, and mark the newly occupied reservation stations as busy.
-    // Also, write the station id of reservation station inside the instruction
-    // After issuing at most 2 instructions, reorganize the instruction queue
-{
-    if (processor == NULL)
-    {
-        printf("try_to_issue_instructions: Got NULL!\n");
-        exit(-1);
-    }
-    
-    // if there are no instructions to issue
-    if (processor->instruction_que_size == 0)
-    {
-        return;
-    }
-
-    // TODO: This can't happen unless these are allocated in this function
-    //o_first_instruction = NULL;
-    //o_second_instruction = NULL;
-
-    uint32_t start_point = 0;
-    uint32_t end_point = processor->conf.add_nr_reservation;
-    uint32_t num_instructions_issued = 0;
-
-    get_reservation_stations_indices_by_opcode(processor->instruction_que[0].opcode, processor->conf, &start_point, &end_point);
-    for (uint32_t i = start_point; i < end_point; ++i)
-    {
-        if (processor->reservation_stations[i].busy == 0)
-        {
-            *o_first_instruction = processor->instruction_que[0];
-            processor->reservation_stations[i].busy = 1;
-            o_first_instruction->reservation_station = &processor->reservation_stations[i];
-            num_instructions_issued = 1;
-            o_first_instruction->cycle_issued = current_cycle;
-            break;
-        }
-    }
-
-    get_reservation_stations_indices_by_opcode(processor->instruction_que[1].opcode, processor->conf, &start_point, &end_point);
-    for (uint32_t i = start_point; i < end_point; ++i)
-    {
-        if (processor->reservation_stations[i].busy == 0)
-        {
-            *o_second_instruction = processor->instruction_que[1];
-            processor->reservation_stations[i].busy = 1;
-            o_second_instruction->reservation_station = &processor->reservation_stations[i];
-            num_instructions_issued = 2;
-            o_second_instruction->cycle_issued = current_cycle;
-            break;
-        }
-    }
-
-    // Update instruction queue by moving the next instructions to the beginning of the queue and updating the correct size
-    memmove(processor->instruction_que, processor->instruction_que + num_instructions_issued, INSTRUCTION_QUEUE_SIZE - num_instructions_issued);
-    processor->instruction_que_size -= num_instructions_issued;
-    memset(processor->instruction_que + processor->instruction_que_size, 0, num_instructions_issued);
-}
-
-void assign_register_values_if_possible(register_t* regs, instruction_t instruction)
+// i need an explanation for this function
+void assign_register_values_if_possible(register_t *regs, instruction_t instruction)
 {
     if (regs[instruction.src0].busy != 2)
     {
@@ -946,7 +705,7 @@ void assign_instruction_to_reservation_station(processor_t *processor, instructi
     {
         return;
     }
-    
+
     // this function edits all the parameters of the reservation station to which a new instruction got assigned.
     // it checks whether the required registers are ready, and if it's ready - a next function call will start the execution of the
     // instruction, if possible.
@@ -964,75 +723,129 @@ void set_pending_register_to_busy(register_t *regs)
     }
 }
 
-uint8_t check_if_can_exit(reservation_station_t* reservation_stations)
+uint8_t check_if_can_exit(reservation_station_t *reservation_stations)
 {
     // TODO
 
     return 0;
 }
 
-int run_processor(processor_t* processor, instruction_t* instructions)
+uint8_t execute_task_if_finished_and_get_result(uint32_t cycle, reservation_station_t reservation_station, configurations_t conf, float *result)
+{
+    long delay = 0;
+
+    switch (reservation_station.op)
+    {
+    case ADD_OPCODE:
+        *result = reservation_station.vj + reservation_station.vk;
+        delay = conf.add_delay;
+        break;
+    case SUB_OPCODE:
+        *result = reservation_station.vj - reservation_station.vk;
+        delay = conf.add_delay;
+        break;
+    case MUL_OPCODE:
+        *result = reservation_station.vj * reservation_station.vk;
+        delay = conf.mul_delay;
+        break;
+    case DIV_OPCODE:
+        if (reservation_station.vk == 0)
+        {
+            printf("Division by zero!\n");
+            exit(-1);
+        }
+        *result = reservation_station.vj / reservation_station.vk;
+        delay = conf.div_delay;
+        break;
+    case HALT_OPCODE:
+        // TODO
+        //  *halted = 1; // ???
+        printf("\n\nTODO!\n\n");
+        exit(-2);
+    default:
+        exit(11);
+        break;
+    }
+
+    return (cycle == reservation_station.start_cycle + delay) ? 1 : 0;
+}
+
+// what is the purpose of this function?
+void write_cdb(processor_t *processor, uint32_t cycle)
+{
+    uint32_t nr_reservation =
+        processor->conf.add_nr_reservation +
+        processor->conf.mul_nr_reservation +
+        processor->conf.div_nr_reservation;
+    uint32_t nr_units =
+        processor->conf.add_nr_units +
+        processor->conf.mul_nr_units +
+        processor->conf.div_nr_units;
+
+    float result = 0;
+
+    for (uint32_t i = 0; i < nr_reservation; ++i)
+    {
+        processor->reg[i] = float(i);
+    }
+}
+
+int run_processor(processor_t *processor)
 {
     uint32_t cycle = 0;
-
-    instruction_t first_instruction, second_instruction;
-    init_instruction(&first_instruction);
-    init_instruction(&second_instruction);
-
-    // Fetch first two instructions
-    // TODO is this redundant? or should we first fetch and then loop
-    fetch_instructions(instructions, processor);
-
+    init_processor(processor, &processor->conf); // probebly need to be in the main
+    fetch_instructions(processor);
+    cycle++;
     while (1)
     {
-        // Internally, all these functions do their job only when everything is ready for it
-        
-        // Should we first fetch and then issue? can it happen the other way around?
+        issue_instructions_to_reservation_station(processor, cycle);
+        // from reserve station to execution
+
+        // from excution to cdb
+
+        // from cdb to register
+        write_cdb(processor, cycle);
+        // from register to reserve station?
 
         // The reservation stations list will be constructed like this:
-            // first add_nr_res_stations are the adder stations
-            // the mul_nr_res_stations are the multiplier stations
-            // the the last div_nr_res_stations are the divider stations
+        // first add_nr_res_stations are the adder stations
+        // the mul_nr_res_stations are the multiplier stations
+        // the the last div_nr_res_stations are the divider stations
 
-        start_execution_if_possible(processor, cycle);
+        // start_execution_if_possible(processor, cycle);
 
-        write_cdb(processor, cycle);
+        // get_instructions_to_execute(processor);
+        // execute(processor);
 
-        //get_instructions_to_execute(processor);
-        //execute(processor);
-        
-        //write_tracecdb_file(cycle);
-    
+        // write_tracecdb_file(cycle);
+
         // if got halted, continue execution loop but don't fetch and issue new instructions.
         // loop until there are no more instructions to issue
         if (processor->halted == 1)
         {
-            if (check_if_can_exit(processor->reservation_stations) == 1)
-            {
-                break;
-            }
+            // if (check_if_can_exit(processor->reservation_stations) == 1)
+            //{
+            // break;
+            //}
             continue;
         }
 
-        fetch_instructions(instructions, processor);
-        issue_instructions(processor, &first_instruction, &second_instruction, cycle);
+        // issue_instructions(processor, &first_instruction, &second_instruction, cycle);
 
-        assign_instruction_to_reservation_station(processor, first_instruction);
-        assign_instruction_to_reservation_station(processor, second_instruction);
-
-        init_instruction(&first_instruction);
-        init_instruction(&second_instruction);
+        //assign_instruction_to_reservation_station(processor, first_instruction);
+        //assign_instruction_to_reservation_station(processor, second_instruction);
 
         set_pending_register_to_busy(processor->reg);
+        fetch_instructions(processor);
         ++cycle;
     }
 
-    //write_traceinst_file(/*instructions*/);
-    //write_regout_file(/*processor*/);
+    // write_traceinst_file(/*instructions*/);
+    // write_regout_file(/*processor*/);
 }
 
 // TODO probably irrelevant
-void execute(processor_t* processor, instruction_t instruction)
+void execute(processor_t *processor, instruction_t instruction)
 {
     const long opcode = instruction.opcode;
     const uint32_t dst = instruction.dst;
@@ -1061,8 +874,6 @@ void execute(processor_t* processor, instruction_t instruction)
     }
 }
 
-
-
 /*
  * Function: main
  * --------------
@@ -1075,7 +886,7 @@ void execute(processor_t* processor, instruction_t instruction)
  *  - 0: Successful execution of the program.
  *  - Non-zero: Indicates an error during program execution.
  */
-int main(int argc, char* argv[])
+int main(int argc, char *argv[])
 {
     if (argc != 3)
     {
@@ -1083,8 +894,8 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    FILE* config_file = NULL;
-    FILE* memin_file = NULL;
+    FILE *config_file = NULL;
+    FILE *memin_file = NULL;
     // FILE *regout_file = NULL;
     // FILE *traceinst_file = NULL;
     // FILE *tracecdb_file = NULL;
@@ -1096,7 +907,7 @@ int main(int argc, char* argv[])
     errno_t err_traceinst_file = 0;
     errno_t err_tracecdb_file = 0;
 
-    instruction_t instructions[MEMIN_INSTRUCTIONS_NUM] = { 0 };
+    instruction_t instructions[MEMIN_INSTRUCTIONS_NUM] = {0};
 
     err_config_file = fopen_s(&config_file, argv[1], "r");
     if (config_file == NULL)
@@ -1113,7 +924,6 @@ int main(int argc, char* argv[])
     }
     fclose(config_file);
     print_configs(configs);
-
 
     err_memin_file = fopen_s(&memin_file, argv[2], "r");
     if (memin_file == NULL)
@@ -1136,7 +946,7 @@ int main(int argc, char* argv[])
 // Run program: Ctrl + F5 or Debug > Start Without Debugging menu
 // Debug program: F5 or Debug > Start Debugging menu
 
-// Tips for Getting Started: 
+// Tips for Getting Started:
 //   1. Use the Solution Explorer window to add/manage files
 //   2. Use the Team Explorer window to connect to source control
 //   3. Use the Output window to see build output and other messages
