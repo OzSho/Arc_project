@@ -432,7 +432,7 @@ int parse_memin(FILE* memin_file, instruction_t* instructions)
 
     size_t file_size = fread(file_contents, 1, MAX_MEMIN_FILE_SIZE, memin_file);
     // TODO check for errors?
-    
+
     if (file_size == MAX_MEMIN_FILE_SIZE)
     {
         printf("File too big!\n");
@@ -818,22 +818,6 @@ void issue_instructions(processor_t* processor, instruction_t* o_first_instructi
 }
 
 /**
- * @brief Updates the register values in the reservation station if possible.
- *
- * This function checks the status of source registers and updates the corresponding values and queue flags in the reservation station based on their availability. If a source register is not busy, its value is directly assigned to the reservation station; otherwise, the queue flag is updated with the register's queue id, and the value is set to UINT16_MAX to indicate that it's not available.
- *
- * @param regs Array of registers.
- * @param instruction Instruction containing source and destination register indices.
- */
-void assign_register_values_if_possible(register_t* regs, instruction_t instruction) {
-    update_register_value(regs, instruction.src0, &instruction.reservation_station->vj, &instruction.reservation_station->qj);
-    update_register_value(regs, instruction.src1, &instruction.reservation_station->vk, &instruction.reservation_station->qk);
-
-    regs[instruction.dst].busy = 1;
-    regs[instruction.dst].q_i = instruction.reservation_station->station_id;
-}
-
-/**
  * @brief Updates the register value and queue flag in the reservation station based on the source register's status.
  *
  * This function updates the reservation station's value and queue flag based on the status of the specified source register.
@@ -851,6 +835,22 @@ void update_register_value(register_t* regs, uint32_t src_index, uint32_t* value
         *queue_flag = regs[src_index].q_i;
         *value = UINT16_MAX;
     }
+}
+
+/**
+ * @brief Updates the register values in the reservation station if possible.
+ *
+ * This function checks the status of source registers and updates the corresponding values and queue flags in the reservation station based on their availability. If a source register is not busy, its value is directly assigned to the reservation station; otherwise, the queue flag is updated with the register's queue id, and the value is set to UINT16_MAX to indicate that it's not available.
+ *
+ * @param regs Array of registers.
+ * @param instruction Instruction containing source and destination register indices.
+ */
+void assign_register_values_if_possible(register_t* regs, instruction_t instruction) {
+    update_register_value(regs, instruction.src0, &instruction.reservation_station->vj, &instruction.reservation_station->qj);
+    update_register_value(regs, instruction.src1, &instruction.reservation_station->vk, &instruction.reservation_station->qk);
+
+    regs[instruction.dst].busy = 1;
+    regs[instruction.dst].q_i = instruction.reservation_station->station_id;
 }
 
 
