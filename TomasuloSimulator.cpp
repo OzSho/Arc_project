@@ -630,7 +630,8 @@ uint8_t execute_task_if_finished_and_get_result(uint32_t cycle, reservation_stat
         break;
     }
 
-    if (cycle == reservation_station.start_cycle + delay && cdb->busy == 0)
+    // TODO check that >= is not buggy
+    if (cycle >= reservation_station.start_cycle + delay && cdb->busy == 0)
     {
         cdb->busy = 1;
         cdb->pc = reservation_station.ins;
