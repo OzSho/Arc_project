@@ -785,7 +785,7 @@ void write_cdb(processor_t* processor, uint32_t cycle, cdb_t* cdb,FILE* tracecdb
     init_reservation_station(&(processor->reservation_stations[sending_station_id-1]), sending_station_id);
 
     printf("write_cdb: cycle=%d, result=%f from station id %d from instruction number %d\n", cycle, result, sending_station_id, pc);
-    write_tracecdb_file(tracecdb_file, cycle, result, sending_station_id, pc);
+    write_tracecdb_file(tracecdb_file,cdb->station_id, cycle, result, sending_station_id, pc);
 }
 
 /**
@@ -1171,19 +1171,19 @@ int write_regout_file(FILE* regout_file, register_t* reg) {
 
 
 // do we need it?
-char *find_tag_name(char *tag, instruction_t instruction)
+char *find_tag_name(char *tag, uint32_t opcode , uint32_t station_id)
 {
-    if (instruction.opcode == ADD_OPCODE || instruction.opcode == SUB_OPCODE)
+    if (opcode == ADD_OPCODE || opcode == SUB_OPCODE)
     {
-        sprintf(tag, "ADD%d", instruction.reservation_station->station_id);
+        sprintf(tag, "ADD%d", station_id);
     }
-    else if (instruction.opcode == MUL_OPCODE)
+    else if (opcode == MUL_OPCODE)
     {
-        sprintf(tag, "MUL%d", instruction.reservation_station->station_id);
+        sprintf(tag, "MUL%d", station_id);
     }
-    else if (instruction.opcode == DIV_OPCODE)
+    else if (opcode == DIV_OPCODE)
     {
-        sprintf(tag, "DIV%d", instruction.reservation_station->station_id);
+        sprintf(tag, "DIV%d", station_id);
     }
     else
     {
@@ -1207,7 +1207,7 @@ int write_traceinst_file(FILE* traceinst_file, instruction_t* instructions) {
         }
         else
         {
-            find_tag_name(tag_name, instructions[i]);
+            find_tag_name(tag_name, instructions[i].opcode, instructions[i].reservation_station->station_id);
             fprintf(traceinst_file, "%08x %d %s %d %d %d %d\n", instructions[i].raw_instruction,instructions[i].pc,tag_name, instructions[i].cycle_issued, instructions[i].cycle_execute_start, instructions[i].cycle_execute_end,instructions[i].cycle_cdb);
         }
         i++;
@@ -1217,9 +1217,11 @@ int write_traceinst_file(FILE* traceinst_file, instruction_t* instructions) {
 }
 
 // need to run each cycle when using CDB
-int write_tracecdb_file(FILE* tracecdb_file, uint32_t cycle,uint32_t result,uint32_t sending_station_id,uint32_t pc) {
+int write_tracecdb_file(FILE* tracecdb_file,uint32_t cdb_id,uint32_t cycle,uint32_t result,uint32_t sending_station_id,uint32_t pc) {
+    char tag_name[10] = {}; // Add initializer
+    find_tag_name(tag_name, cdb_id, sending_station_id);
     // Implementation of writing the trace CDB file
-    fprintf(tracecdb_file, "%d %d %f %d\n", cycle, pc, result, sending_station_id);
+    fprintf(tracecdb_file, "%d %d %f %d\n", cycle, pc, result, tag_name);
     // Return 0 on success, non-zero value on failure
     return 0;
 }
@@ -1254,6 +1256,7 @@ int main(int argc, char* argv[])
     processor_t processor;
 
     instruction_t instructions[MEMIN_INSTRUCTIONS_NUM] = { 0 };
+    instruction_t* instructions_ptr = instructions;
 
     err_config_file = fopen_s(&config_file, argv[1], "r");
     if (config_file == NULL)
@@ -1288,7 +1291,7 @@ int main(int argc, char* argv[])
     fclose(memin_file);
 
     init_processor(&processor, configs);
-    run_processor(&processor, instructions);
+    run_processor(&processor, instructions_ptr);
     return 0;
 }
 
