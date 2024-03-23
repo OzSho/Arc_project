@@ -883,7 +883,7 @@ void issue_instructions(processor_t* processor, instruction_t* o_first_instructi
 
 void assign_register_values_if_possible(register_t* regs, instruction_t instruction)
 {
-    if (regs[instruction.src0].busy != 2)
+    if (regs[instruction.src0].busy == 0)
     {
         instruction.reservation_station->vj = regs[instruction.src0].v_i;
         instruction.reservation_station->qj = 0;
@@ -894,7 +894,7 @@ void assign_register_values_if_possible(register_t* regs, instruction_t instruct
         instruction.reservation_station->vj = UINT16_MAX;
     }
 
-    if (regs[instruction.src1].busy != 2)
+    if (regs[instruction.src1].busy == 0)
     {
         instruction.reservation_station->vk = regs[instruction.src1].v_i;
         instruction.reservation_station->qk = 0;
