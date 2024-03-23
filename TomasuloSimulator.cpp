@@ -501,23 +501,6 @@ int parse_memin(FILE* memin_file, instruction_t* instructions)
     return 0;
 }
 
-int write_regout_file() {
-    // Implementation of writing the register output file
-    // Return 0 on success, non-zero value on failure
-    return 0;
-}
-
-int write_traceinst_file() {
-    // Implementation of writing the trace instruction file
-    // Return 0 on success, non-zero value on failure
-    return 0;
-}
-
-int write_tracecdb_file() {
-    // Implementation of writing the trace CDB file
-    // Return 0 on success, non-zero value on failure
-    return 0;
-}
 
 /**
  * @brief Fetches instructions from the instruction array and adds them to the instruction queue.
@@ -738,7 +721,7 @@ void end_execution_if_possible(processor_t *processor, uint32_t cycle)
  * @param cycle The current clock cycle.
  * @param cdb Pointer to the CDB structure to be updated.
  */
-void write_cdb(processor_t* processor, uint32_t cycle, cdb_t* cdb)
+void write_cdb(processor_t* processor, uint32_t cycle, cdb_t* cdb,FILE* tracecdb_file)
 {
     uint32_t nr_reservation =
         processor->conf.add_nr_reservation +
@@ -802,6 +785,7 @@ void write_cdb(processor_t* processor, uint32_t cycle, cdb_t* cdb)
     init_reservation_station(&(processor->reservation_stations[sending_station_id-1]), sending_station_id);
 
     printf("write_cdb: cycle=%d, result=%f from station id %d from instruction number %d\n", cycle, result, sending_station_id, pc);
+    write_tracecdb_file(tracecdb_file, cycle, result, sending_station_id, pc);
 }
 
 /**
@@ -814,11 +798,11 @@ void write_cdb(processor_t* processor, uint32_t cycle, cdb_t* cdb)
  * @param processor Pointer to the processor structure.
  * @param cycle The current clock cycle.
  */
-void write_cdb_if_possible(processor_t* processor, uint32_t cycle)
+void write_cdb_if_possible(processor_t* processor, uint32_t cycle, FILE* tracecdb_file)
 {
     if (processor->cdb_add.busy == 1)
     {
-        write_cdb(processor, cycle, &(processor->cdb_add));
+        write_cdb(processor, cycle, &(processor->cdb_add), tracecdb_file);
         processor->cdb_add.busy = 0;
         // TODO is this correct?
         processor->cdb_add.cycle = cycle;
@@ -826,14 +810,14 @@ void write_cdb_if_possible(processor_t* processor, uint32_t cycle)
 
     if (processor->cdb_mul.busy == 1)
     {
-        write_cdb(processor, cycle, &(processor->cdb_mul));
+        write_cdb(processor, cycle, &(processor->cdb_mul), tracecdb_file);
         processor->cdb_mul.busy = 0;
         processor->cdb_mul.cycle = cycle;
     }
 
     if (processor->cdb_div.busy == 1)
     {
-        write_cdb(processor, cycle, &(processor->cdb_div));
+        write_cdb(processor, cycle, &(processor->cdb_div), tracecdb_file);
         processor->cdb_div.busy = 0;
         processor->cdb_div.cycle = cycle;
     }
@@ -1081,13 +1065,24 @@ uint8_t check_if_can_exit(reservation_station_t* reservation_stations, configura
 /**
  * @brief Runs the processor to execute instructions.
  *
- * This function runs the processor in a loop to execute instructions. It continuously fetches, issues, and executes instructions until the processor is halted and there are no more instructions to issue. Internally, it orchestrates the execution flow by calling various helper functions to perform different stages of instruction execution such as starting execution if possible, writing to the common data bus (CDB), fetching instructions, issuing instructions to reservation stations, and setting pending registers to busy status.
+ * This function runs the processor in a loop to execute instructions. 
+ * It continuously fetches, issues, and executes instructions until the processor is halted and there are no more instructions to issue. 
+ * Internally, it orchestrates the execution flow by calling various helper functions to perform different stages of instruction execution such as starting execution if possible, 
+ * writing to the common data bus (CDB), fetching instructions, issuing instructions to reservation stations, and setting pending registers to busy status.
  *
  * @param processor Pointer to the processor structure.
  * @param instructions Array of instructions to be executed.
  */
 void run_processor(processor_t* processor, instruction_t* instructions)
 {
+    //open the file to write the traceinst file
+    FILE* tracecdb_file = fopen("tracecdb.txt", "w");
+    if (tracecdb_file == NULL)
+    {
+        printf("Failed to open traceinst file!\n");
+        exit(1);
+    }
+
     uint32_t cycle = 0;
 
     instruction_t first_instruction, second_instruction;
@@ -1104,7 +1099,7 @@ void run_processor(processor_t* processor, instruction_t* instructions)
             // first add_nr_res_stations are the adder stations
             // the mul_nr_res_stations are the multiplier stations
             // the the last div_nr_res_stations are the divider stations
-        write_cdb_if_possible(processor, cycle);
+        write_cdb_if_possible(processor, cycle, tracecdb_file);
 
         start_execution_if_possible(processor, cycle);
         
@@ -1139,9 +1134,94 @@ void run_processor(processor_t* processor, instruction_t* instructions)
         set_pending_register_to_busy(processor->reg);
         ++cycle;
     }
+    //open file tranceinst to write the traceinst file
+    FILE* traceinst_file = fopen("traceinst.txt", "w");
+    if (traceinst_file == NULL)
+    {
+        printf("Failed to open traceinst file!\n");
+        exit(1);
+    }
+    //open file regout to write the regout file
+    FILE* regout_file = fopen("regout.txt", "w");
+    if (regout_file == NULL)
+    {
+        printf("Failed to open regout file!\n");
+        exit(1);
+    }
+    //write the traceinst file
+    write_traceinst_file(traceinst_file, instructions);
+    //write the regout file
+    write_regout_file(regout_file, processor->reg);
+    //close the files
+    fclose(traceinst_file);
+    fclose(regout_file);
+    fclose(tracecdb_file);
+}
 
-    //write_traceinst_file(/*instructions*/);
-    //write_regout_file(/*processor*/);
+int write_regout_file(FILE* regout_file, register_t* reg) {
+    // Implementation of writing the register output file
+    for (size_t i = 0; i < 16; i++)
+    {
+        fprintf(regout_file, "%f\n", reg[i].v_i);
+    }
+    
+    // Return 0 on success, non-zero value on failure
+    return 0;
+}
+
+
+// do we need it?
+char *find_tag_name(char *tag, instruction_t instruction)
+{
+    if (instruction.opcode == ADD_OPCODE || instruction.opcode == SUB_OPCODE)
+    {
+        sprintf(tag, "ADD%d", instruction.reservation_station->station_id);
+    }
+    else if (instruction.opcode == MUL_OPCODE)
+    {
+        sprintf(tag, "MUL%d", instruction.reservation_station->station_id);
+    }
+    else if (instruction.opcode == DIV_OPCODE)
+    {
+        sprintf(tag, "DIV%d", instruction.reservation_station->station_id);
+    }
+    else
+    {
+        sprintf(tag, "HALT");
+    }
+    return tag;
+}
+
+
+int write_traceinst_file(FILE* traceinst_file, instruction_t* instructions) {
+    // Implementation of writing the trace instruction file
+    int i = 0;
+    char tag_name[10] = {}; // Add initializer
+    //find the tag name in char while getting intruction.tag[i].tag
+
+    while (instructions[i].raw_instruction != 0 )
+    {
+        if (instructions[i].opcode == HALT_OPCODE)
+        {
+            return 0;
+        }
+        else
+        {
+            find_tag_name(tag_name, instructions[i]);
+            fprintf(traceinst_file, "%08x %d %s %d %d %d %d\n", instructions[i].raw_instruction,instructions[i].pc,tag_name, instructions[i].cycle_issued, instructions[i].cycle_execute_start, instructions[i].cycle_execute_end,instructions[i].cycle_cdb);
+        }
+        i++;
+    }
+    // Return 0 on success, non-zero value on failure
+    return 0;
+}
+
+// need to run each cycle when using CDB
+int write_tracecdb_file(FILE* tracecdb_file, uint32_t cycle,uint32_t result,uint32_t sending_station_id,uint32_t pc) {
+    // Implementation of writing the trace CDB file
+    fprintf(tracecdb_file, "%d %d %f %d\n", cycle, pc, result, sending_station_id);
+    // Return 0 on success, non-zero value on failure
+    return 0;
 }
 
 /**
@@ -1163,9 +1243,6 @@ int main(int argc, char* argv[])
 
     FILE* config_file = NULL;
     FILE* memin_file = NULL;
-    // FILE *regout_file = NULL;
-    // FILE *traceinst_file = NULL;
-    // FILE *tracecdb_file = NULL;
     configurations_t configs;
 
     errno_t err_config_file = 0;
