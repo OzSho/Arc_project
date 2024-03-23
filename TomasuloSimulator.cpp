@@ -26,9 +26,11 @@
 
 // TODO fix exit codes
 // TODO check variable type warnings
+// TODO add NO_STATION_ID constant
 
 typedef struct {
     uint32_t cdb_id;        // Identifier for the CDB (ADD, MUL, DIV)
+    uint32_t station_id;    // The identifier of the reservation station that sent the data
     uint32_t output;        // output transmitted on the CDB
     uint32_t busy;          // Flag indicating if the station is busy (1) or available (0)
     uint32_t cycle;         // The cycle in which the data is being delivered
@@ -135,6 +137,7 @@ void init_CDB(cdb_t* cdb, uint32_t cdb_id)
 {
     cdb->cdb_id = cdb_id;
     cdb->busy = 0;
+    cdb->station_id = 0;
     cdb->output = 0;
     cdb->cycle = 0;
     cdb->pc = 0;
@@ -232,6 +235,7 @@ void init_processor(processor_t* processor, configurations_t configs/*, uint32_t
         {
             cdb_id = DIV_OPCODE;
         }
+        // TODO probably no need for the cdb id here
         init_unit(&(processor->units[i]), cdb_id);
     }
 
@@ -563,10 +567,11 @@ void start_execution_if_possible(processor_t* processor, uint32_t cycle) {
             
             uint32_t opcode = processor->reservation_stations[i].op;
             uint32_t unit_id = processor->units[j].cdb_id;
+            // TODO check that this works cause it doesn't seem that way
             if (
-                !((opcode == ADD_OPCODE || opcode == SUB_OPCODE) && unit_id == ADD_ID) &&
-                !(opcode == MUL_OPCODE && unit_id == MUL_ID) &&
-                !(opcode == DIV_OPCODE && unit_id == DIV_ID)
+                !((opcode == ADD_OPCODE || opcode == SUB_OPCODE) && unit_id == ADD_OPCODE) &&
+                !(opcode == MUL_OPCODE && unit_id == MUL_OPCODE) &&
+                !(opcode == DIV_OPCODE && unit_id == DIV_OPCODE)
                 )
             {
                 continue;
@@ -580,23 +585,28 @@ void start_execution_if_possible(processor_t* processor, uint32_t cycle) {
     }
 }
 
-uint8_t execute_task_if_finished_and_get_result(uint32_t cycle, reservation_station_t reservation_station, configurations_t conf, float* result, uint8_t* halted)
+uint8_t execute_task_if_finished_and_get_result(uint32_t cycle, reservation_station_t reservation_station, configurations_t conf, uint8_t* halted, cdb_t* cdb_add, cdb_t* cdb_mul, cdb_t* cdb_div)
 {
     long delay = 0;
-    
+    cdb_t* cdb = NULL;
+    float result = 0;
+
     switch (reservation_station.op)
     {
     // TODO warning converting to float
     case ADD_OPCODE:
-        *result = reservation_station.vj + reservation_station.vk;
+        cdb = cdb_add;
+        result = reservation_station.vj + reservation_station.vk;
         delay = conf.add_delay;
         break;
     case SUB_OPCODE:
-        *result = reservation_station.vj - reservation_station.vk;
+        cdb = cdb_add;
+        result = reservation_station.vj - reservation_station.vk;
         delay = conf.add_delay;
         break;
     case MUL_OPCODE:
-        *result = reservation_station.vj * reservation_station.vk;
+        cdb = cdb_mul;
+        result = reservation_station.vj * reservation_station.vk;
         delay = conf.mul_delay;
         break;
     case DIV_OPCODE:
@@ -605,24 +615,35 @@ uint8_t execute_task_if_finished_and_get_result(uint32_t cycle, reservation_stat
             printf("Division by zero!\n");
             exit(-1);
         }
-        *result = reservation_station.vj / reservation_station.vk;
+        result = reservation_station.vj / reservation_station.vk;
+        cdb = cdb_div;
         delay = conf.div_delay;
         break;
     case HALT_OPCODE:
         // TODO this should never happen - make sure of it
         *halted = 1;
         printf("\n\nCheck that halted is working!\n\n");
+        exit(13);
         break;
     default:
         exit(11);
         break;
     }
 
-    return (cycle == reservation_station.start_cycle + delay) ? 1 : 0;
+    if (cycle == reservation_station.start_cycle + delay && cdb->busy == 0)
+    {
+        cdb->busy = 1;
+        cdb->pc = reservation_station.ins;
+        cdb->output = result;
+        cdb->station_id = reservation_station.station_id;
+        return 1;
+    }
+
+    return 0;
 }
 
 // TODO Wait for the cdb to be free!
-void write_cdb(processor_t *processor, uint32_t cycle)
+void end_execution_if_possible(processor_t *processor, uint32_t cycle)
 {
     uint32_t nr_reservation = 
         processor->conf.add_nr_reservation + 
@@ -632,9 +653,7 @@ void write_cdb(processor_t *processor, uint32_t cycle)
         processor->conf.add_nr_units +
         processor->conf.mul_nr_units +
         processor->conf.div_nr_units;
-    
-    float result = 0;
-    
+        
     for (uint32_t i = 0; i < nr_reservation; ++i)
     {
         if (processor->reservation_stations[i].busy == 0 || processor->reservation_stations[i].start_cycle == 0)
@@ -642,66 +661,129 @@ void write_cdb(processor_t *processor, uint32_t cycle)
             continue;
         }
 
-        if (execute_task_if_finished_and_get_result(cycle, processor->reservation_stations[i], processor->conf, &result, &(processor->halted)) == 0)
+        if (execute_task_if_finished_and_get_result(cycle, processor->reservation_stations[i], processor->conf, &(processor->halted), &(processor->cdb_add), &(processor->cdb_mul), &(processor->cdb_div)) == 0)
         {
             continue;
         }
         
-        // Go over awaiting reservation stations and update with result
-        for (uint32_t j = 0; j < nr_reservation; ++j)
-        {
-            if (i == j)
-            {
-                continue;
-            }
-
-            if (processor->reservation_stations[j].qj == processor->reservation_stations[i].station_id)
-            {
-                processor->reservation_stations[j].vj = result;
-                processor->reservation_stations[j].qj = 0;
-            }
-
-            if (processor->reservation_stations[j].qk == processor->reservation_stations[i].station_id)
-            {
-                processor->reservation_stations[j].vk = result;
-                processor->reservation_stations[j].qk = 0;
-            }
-        }
-
-        // Go over awaiting registers and update with result
-        for (uint32_t k = 0; k < NUM_REGISTERS; k++)
-        {
-            if (processor->reg[k].q_i == processor->reservation_stations[i].station_id)
-            {
-                processor->reg[k].v_i = result;
-                processor->reg[k].q_i = 0;
-            }
-             
-        }
-
-        // TODO where to store this?
-        instruction_t instruction;
-        instruction.cycle_cdb = cycle;
-
-        // mark execution unit as not busy
-        for (uint32_t j = 0; j < nr_units; j++)
-        {
-            if (processor->reservation_stations[i].ins == processor->units[j].pc)
-            {
-                processor->units[j].busy = 0;
-                break;
-            }
-        }
-
-        // empty reservation station
-        printf("insturction %d, set reservation station %d to NOT busy\n", processor->reservation_stations[i].ins, processor->reservation_stations[i].station_id);
-        processor->reservation_stations[i].busy = 0;
-        init_reservation_station(&(processor->reservation_stations[i]), processor->reservation_stations[i].station_id);
-        
-        printf("write_cdb: cycle=%d, result=%f\n", cycle, result);
+        // TODO write result and station id (or something else?) somewhere.
     }
 
     // TODO maybe we can return here false cause the res stations should never be empty
+}
+
+
+void write_cdb(processor_t* processor, uint32_t cycle, cdb_t* cdb)
+{
+    uint32_t nr_reservation =
+        processor->conf.add_nr_reservation +
+        processor->conf.mul_nr_reservation +
+        processor->conf.div_nr_reservation;
+    uint32_t nr_units =
+        processor->conf.add_nr_units +
+        processor->conf.mul_nr_units +
+        processor->conf.div_nr_units;
+
+    const float result = cdb->output;
+    const uint32_t sending_station_id = cdb->station_id;
+    const uint32_t pc = cdb->pc;
+
+    if (sending_station_id == 0)
+    {
+        printf("Weird!\n\n");
+        exit(14);
+    }
+
+    // Go over awaiting reservation stations and update with result
+    for (uint32_t j = 0; j < nr_reservation; ++j)
+    {
+        if (processor->reservation_stations[j].qj == sending_station_id)
+        {
+            processor->reservation_stations[j].vj = result;
+            processor->reservation_stations[j].qj = 0;
+        }
+
+        if (processor->reservation_stations[j].qk == sending_station_id)
+        {
+            processor->reservation_stations[j].vk = result;
+            processor->reservation_stations[j].qk = 0;
+        }
+    }
+
+    // Go over awaiting registers and update with result
+    for (uint32_t k = 0; k < NUM_REGISTERS; k++)
+    {
+        if (processor->reg[k].q_i == sending_station_id)
+        {
+            processor->reg[k].v_i = result;
+            processor->reg[k].q_i = 0;
+        }
+    }
+
+    // mark execution unit as not busy
+    for (uint32_t j = 0; j < nr_units; j++)
+    {
+        if (processor->units[j].pc == pc)
+        {
+            processor->units[j].busy = 0;
+            break;
+        }
+    }
+
+    // empty reservation station
+    printf("insturction %d, set reservation station %d to NOT busy\n", pc, sending_station_id);
+
+    // TODO should we do this here?
+    init_reservation_station(&(processor->reservation_stations[sending_station_id-1]), sending_station_id);
+
+    printf("write_cdb: cycle=%d, result=%f from station id %d from instruction number %d\n", cycle, result, sending_station_id, pc);
+}
+
+
+void write_cdb_if_possible(processor_t* processor, uint32_t cycle)
+{
+    if (processor->cdb_add.busy == 1)
+    {
+        write_cdb(processor, cycle, &(processor->cdb_add));
+        processor->cdb_add.busy = 0;
+        // TODO is this correct?
+        processor->cdb_add.cycle = cycle;
+    }
+
+    if (processor->cdb_mul.busy == 1)
+    {
+        write_cdb(processor, cycle, &(processor->cdb_mul));
+        processor->cdb_mul.busy = 0;
+        processor->cdb_mul.cycle = cycle;
+    }
+
+    if (processor->cdb_div.busy == 1)
+    {
+        write_cdb(processor, cycle, &(processor->cdb_div));
+        processor->cdb_div.busy = 0;
+        processor->cdb_div.cycle = cycle;
+    }
+
+    //if (processor->cdb_mul.busy == 0 && result_mul_exists == 1)
+    //{
+    //    processor->cdb_mul.output = result_mul;
+    //    processor->cdb_mul.busy = 1;
+    //}
+    //else if (processor->cdb_mul.busy == 1)
+    //{
+    //    processor->cdb_mul.busy = 0;
+    //}
+
+    //if (processor->cdb_div.busy == 0 && result_div_exists == 1)
+    //{
+    //    processor->cdb_div.output = result_div;
+    //    processor->cdb_div.busy = 1;
+    //}
+    //else if (processor->cdb_div.busy == 1)
+    //{
+    //    processor->cdb_div.busy = 0;
+    //}
+
 }
 
 void get_reservation_stations_indices_by_opcode(uint32_t opcode, configurations_t configurations, uint32_t *o_start_index, uint32_t *o_end_index, uint8_t* halted)
@@ -885,10 +967,11 @@ void run_processor(processor_t* processor, instruction_t* instructions)
             // first add_nr_res_stations are the adder stations
             // the mul_nr_res_stations are the multiplier stations
             // the the last div_nr_res_stations are the divider stations
+        write_cdb_if_possible(processor, cycle);
 
         start_execution_if_possible(processor, cycle);
-
-        write_cdb(processor, cycle);
+        
+        end_execution_if_possible(processor, cycle);
 
         //get_instructions_to_execute(processor);
         //execute(processor);
