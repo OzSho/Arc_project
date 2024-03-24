@@ -30,12 +30,13 @@
 
 typedef struct
 {
-    uint32_t cdb_id;     // Identifier for the CDB (ADD, MUL, DIV)
-    uint32_t station_id; // The identifier of the reservation station that sent the data
-    float output;        // output transmitted on the CDB
-    uint32_t busy;       // Flag indicating if the station is busy (1) or available (0)
-    uint32_t cycle;      // The cycle in which the data is being delivered
-    uint32_t pc;         // The program counter of the instruction whose execution resulted in writing to the CDB
+    uint32_t cdb_id;                 // Identifier for the CDB (ADD, MUL, DIV)
+    uint32_t station_id;             // The identifier of the reservation station that sent the data
+    float output;                    // output transmitted on the CDB
+    uint32_t busy;                   // Flag indicating if the station is busy (1) or available (0)
+    uint32_t cycle;                  // The cycle in which the data is being delivered
+    uint32_t pc;                     // The program counter of the instruction whose execution resulted in writing to the CDB
+    uint8_t was_freed_in_this_cycle; // indicates whether the cdb was freed in this cycle, so it's value is not yet available for use. Value 1 means true.
 } cdb_t;
 
 typedef struct
@@ -49,15 +50,17 @@ typedef struct
 
 typedef struct
 {
-    uint32_t station_id;  // Identifier for the reservation station
-    uint32_t busy;        // Flag indicating if the station is busy (1) or available (0)
-    uint32_t ins;         // instruction number
-    uint32_t op;          // Operation to be performed (e.g., ADD, MUL, DIV)
-    float vj;             // Value of operand j
-    float vk;             // Value of operand k
-    uint32_t qj;          // Reservation station producing Vj
-    uint32_t qk;          // Reservation station producing Vk
-    uint32_t start_cycle; // The cycle in which the current instruction has started to execute. Relevant only if busy=1. If value is 0, the instruction has not started yet.
+    uint32_t station_id;              // Identifier for the reservation station
+    uint32_t busy;                    // Flag indicating if the station is busy (1) or available (0)
+    uint32_t ins;                     // instruction number
+    uint32_t op;                      // Operation to be performed (e.g., ADD, MUL, DIV)
+    float vj;                         // Value of operand j
+    float vk;                         // Value of operand k
+    uint32_t qj;                      // Reservation station producing Vj
+    uint32_t qk;                      // Reservation station producing Vk
+    uint32_t start_cycle;             // The cycle in which the current instruction has started to execute. Relevant only if busy=1. If value is 0, the instruction has not started yet.
+    uint8_t was_freed_in_this_cycle;  // indicates whether the station was freed in this cycle, so it's not yet available for use. Value 1 means true.
+    uint8_t cant_start_in_this_cycle; // value 1 if cdb carrying relevant inforamtion was freed in this cycle (thus cant be used until next cycle), otherwise 0
 } reservation_station_t;
 
 typedef struct
@@ -157,6 +160,7 @@ void init_CDB(cdb_t *cdb, uint32_t cdb_id)
     cdb->output = 0;
     cdb->cycle = 0;
     cdb->pc = 0;
+    cdb->was_freed_in_this_cycle = 0;
 }
 
 /**
@@ -197,6 +201,8 @@ void init_reservation_station(reservation_station_t *reservation_station, uint32
     reservation_station->qj = 0;
     reservation_station->qk = 0;
     reservation_station->start_cycle = 0;
+    reservation_station->was_freed_in_this_cycle = 0;
+    reservation_station->cant_start_in_this_cycle = 0;
 }
 
 /**
@@ -233,7 +239,7 @@ void init_processor(processor_t *processor, configurations_t configs /*, uint32_
         exit(EXIT_FAILURE);
     }
     // Initialize registers to zero or other default values
-    for (int i = 0; i < 16; i++)
+    for (uint32_t i = 0; i < 16; i++)
     {
         processor->reg[i].q_i = 0;
         processor->reg[i].v_i = (float)i;
@@ -242,7 +248,7 @@ void init_processor(processor_t *processor, configurations_t configs /*, uint32_
     // Initialize memory to zero
     memset(processor->memin, 0, sizeof(instruction_t) * 4096);
     // Initialize reservation stations based on configuration data
-    int num_reservation_stations = configs.add_nr_reservation + configs.mul_nr_reservation + configs.div_nr_reservation;
+    uint32_t num_reservation_stations = configs.add_nr_reservation + configs.mul_nr_reservation + configs.div_nr_reservation;
     processor->reservation_stations = (reservation_station_t *)malloc(sizeof(reservation_station_t) * num_reservation_stations);
     if (processor->reservation_stations == NULL)
     {
@@ -250,13 +256,13 @@ void init_processor(processor_t *processor, configurations_t configs /*, uint32_
         exit(EXIT_FAILURE);
     }
     // Initialize reservation stations
-    for (int i = 0; i < num_reservation_stations; i++)
+    for (uint32_t i = 0; i < num_reservation_stations; i++)
     {
         init_reservation_station(&(processor->reservation_stations[i]), i + 1);
     }
 
     // Initialize units based on configuration data
-    int num_units = configs.add_nr_units + configs.mul_nr_units + configs.div_nr_units;
+    uint32_t num_units = configs.add_nr_units + configs.mul_nr_units + configs.div_nr_units;
     processor->units = (unit_t *)malloc(sizeof(unit_t) * num_units);
     if (processor->units == NULL)
     {
@@ -265,7 +271,7 @@ void init_processor(processor_t *processor, configurations_t configs /*, uint32_
     }
     // Initialize reservation stations
     uint32_t cdb_id = 0;
-    for (int i = 0; i < num_units; i++)
+    for (uint32_t i = 0; i < num_units; i++)
     {
         if (i < configs.add_nr_units)
         {
@@ -579,7 +585,8 @@ void start_execution_if_possible(processor_t *processor, uint32_t cycle)
         if (processor->reservation_stations[i].busy == 0 ||
             processor->reservation_stations[i].qj != 0 ||
             processor->reservation_stations[i].qk != 0 ||
-            processor->reservation_stations[i].start_cycle != 0)
+            processor->reservation_stations[i].start_cycle != 0 ||
+            processor->reservation_stations[i].cant_start_in_this_cycle == 1)
         {
             continue;
         }
@@ -670,13 +677,17 @@ uint8_t execute_task_if_finished_and_get_result(uint32_t cycle, reservation_stat
     }
 
     // TODO check that >= is not buggy
-    if (cycle >= reservation_station.start_cycle + delay && cdb->busy == 0)
+    if (cycle >= reservation_station.start_cycle + delay - 1 && processor->memin[reservation_station.ins].cycle_execute_end == 0)
+    {
+        processor->memin[reservation_station.ins].cycle_execute_end = cycle;
+    }
+
+    if (cycle >= reservation_station.start_cycle + delay - 1 && cdb->busy == 0)
     {
         cdb->busy = 1;
         cdb->pc = reservation_station.ins;
         cdb->output = result;
         cdb->station_id = reservation_station.station_id;
-        processor->memin[reservation_station.ins].cycle_execute_end = cycle;
         return 1;
     }
 
@@ -744,19 +755,19 @@ char *find_tag_name(char *tag, uint32_t opcode, uint32_t station_id, processor_t
 {
     if (opcode == ADD_OPCODE || opcode == SUB_OPCODE)
     {
-        sprintf(tag, "ADD%d", station_id - 1);
+        sprintf_s(tag, 10, "ADD%d", station_id - 1);
     }
     else if (opcode == MUL_OPCODE)
     {
-        sprintf(tag, "MUL%d", station_id - processor->conf.add_nr_reservation - 1);
+        sprintf_s(tag, 10, "MUL%d", station_id - processor->conf.add_nr_reservation - 1);
     }
     else if (opcode == DIV_OPCODE)
     {
-        sprintf(tag, "DIV%d", station_id - processor->conf.add_nr_reservation - processor->conf.mul_nr_reservation - 1);
+        sprintf_s(tag, 10, "DIV%d", station_id - processor->conf.add_nr_reservation - processor->conf.mul_nr_reservation - 1);
     }
     else
     {
-        sprintf(tag, "BUG: opcode %d", opcode);
+        sprintf_s(tag, 10, "BUG: opcode %d", opcode);
     }
     return tag;
 }
@@ -792,10 +803,23 @@ int write_traceinst_file(FILE *traceinst_file, processor_t *processor)
 // need to run each cycle when using CDB
 int write_tracecdb_file(FILE *tracecdb_file, uint32_t cdb_id, uint32_t cycle, float result, uint32_t sending_station_id, uint32_t pc, processor_t *processor)
 {
-    char tag_name[10]; // Add initializer
+    char tag_name[10];    // Add initializer
+    char opcode_name[10]; // Add initializer
     find_tag_name(tag_name, cdb_id, sending_station_id, processor);
+    if (cdb_id == ADD_OPCODE)
+    {
+        sprintf(opcode_name, "ADD");
+    }
+    else if (cdb_id == MUL_OPCODE)
+    {
+        sprintf(opcode_name, "MUL");
+    }
+    else if (cdb_id == DIV_OPCODE)
+    {
+        sprintf(opcode_name, "DIV");
+    }
     // Implementation of writing the trace CDB file
-    fprintf(tracecdb_file, "%d %d %f %s\n", cycle, pc, result, tag_name);
+    fprintf(tracecdb_file, "%d %d %s %f %s\n", cycle, pc, opcode_name, result, tag_name);
     // Return 0 on success, non-zero value on failure
     return 0;
 }
@@ -835,16 +859,18 @@ void write_cdb(processor_t *processor, uint32_t cycle, cdb_t *cdb, FILE *tracecd
     // Go over awaiting reservation stations and update with result
     for (uint32_t j = 0; j < nr_reservation; ++j)
     {
-        if (processor->reservation_stations[j].qj == sending_station_id)
+         if (processor->reservation_stations[j].qj == sending_station_id)
         {
             processor->reservation_stations[j].vj = result;
             processor->reservation_stations[j].qj = 0;
+            processor->reservation_stations[j].cant_start_in_this_cycle = 1;
         }
 
         if (processor->reservation_stations[j].qk == sending_station_id)
         {
             processor->reservation_stations[j].vk = result;
             processor->reservation_stations[j].qk = 0;
+            processor->reservation_stations[j].cant_start_in_this_cycle = 1;
         }
     }
 
@@ -868,12 +894,13 @@ void write_cdb(processor_t *processor, uint32_t cycle, cdb_t *cdb, FILE *tracecd
             break;
         }
     }
-    uint32_t start_cycle = processor->reservation_stations[sending_station_id - 1].ins;
+    uint32_t start_cycle = processor->reservation_stations[sending_station_id - 1].start_cycle;
     // empty reservation station
     printf("insturction %d, set reservation station %d to NOT busy\n", pc, sending_station_id);
 
     // TODO should we do this here?
     init_reservation_station(&(processor->reservation_stations[sending_station_id - 1]), sending_station_id);
+    processor->reservation_stations[sending_station_id - 1].was_freed_in_this_cycle = 1;
     processor->memin[pc].cycle_cdb = cycle;
     write_tracecdb_file(tracecdb_file, cdb->cdb_id, cycle, result, sending_station_id, pc, processor);
     printf("write_cdb: cycle=%d, result=%f from station id %d from instruction number %d. started in cycle: %d\n", cycle, result, sending_station_id, pc, start_cycle);
@@ -897,6 +924,7 @@ void write_cdb_if_possible(processor_t *processor, uint32_t cycle, FILE *tracecd
         processor->cdb_add.busy = 0;
         // TODO is this correct?
         processor->cdb_add.cycle = cycle;
+        processor->cdb_add.was_freed_in_this_cycle = 1;
     }
 
     if (processor->cdb_mul.busy == 1)
@@ -904,6 +932,7 @@ void write_cdb_if_possible(processor_t *processor, uint32_t cycle, FILE *tracecd
         write_cdb(processor, cycle, &(processor->cdb_mul), tracecdb_file);
         processor->cdb_mul.busy = 0;
         processor->cdb_mul.cycle = cycle;
+        processor->cdb_mul.was_freed_in_this_cycle = 1;
     }
 
     if (processor->cdb_div.busy == 1)
@@ -911,8 +940,8 @@ void write_cdb_if_possible(processor_t *processor, uint32_t cycle, FILE *tracecd
         write_cdb(processor, cycle, &(processor->cdb_div), tracecdb_file);
         processor->cdb_div.busy = 0;
         processor->cdb_div.cycle = cycle;
+        processor->cdb_div.was_freed_in_this_cycle = 1;
     }
-
 }
 
 /**
@@ -987,7 +1016,7 @@ void issue_instructions(processor_t *processor, instruction_t *o_first_instructi
     get_reservation_stations_indices_by_opcode(processor->instruction_que[0].opcode, processor->conf, &start_point, &end_point, &(processor->halted));
     for (uint32_t i = start_point; i < end_point; ++i)
     {
-        if (processor->reservation_stations[i].busy == 0)
+        if (processor->reservation_stations[i].busy == 0 && processor->reservation_stations[i].was_freed_in_this_cycle == 0)
         {
             *o_first_instruction = processor->instruction_que[0];
             printf("insturction %d, set reservation station %d to busy\n", o_first_instruction->pc, processor->reservation_stations[i].station_id);
@@ -995,6 +1024,7 @@ void issue_instructions(processor_t *processor, instruction_t *o_first_instructi
             o_first_instruction->reservation_station = &processor->reservation_stations[i];
             ++num_instructions_issued;
             o_first_instruction->cycle_issued = current_cycle;
+            printf("insturction %d, issued in cycle %d\n", o_first_instruction->pc, o_first_instruction->cycle_issued);
             break;
         }
     }
@@ -1010,7 +1040,7 @@ void issue_instructions(processor_t *processor, instruction_t *o_first_instructi
         get_reservation_stations_indices_by_opcode(processor->instruction_que[1].opcode, processor->conf, &start_point, &end_point, &(processor->halted));
         for (uint32_t i = start_point; i < end_point; ++i)
         {
-            if (processor->reservation_stations[i].busy == 0)
+           if (processor->reservation_stations[i].busy == 0 && processor->reservation_stations[i].was_freed_in_this_cycle == 0)
             {
                 *o_second_instruction = processor->instruction_que[1];
                 printf("insturction %d, set reservation station %d to busy\n", o_second_instruction->pc, processor->reservation_stations[i].station_id);
@@ -1018,6 +1048,7 @@ void issue_instructions(processor_t *processor, instruction_t *o_first_instructi
                 o_second_instruction->reservation_station = &processor->reservation_stations[i];
                 ++num_instructions_issued;
                 o_second_instruction->cycle_issued = current_cycle;
+                printf("insturction %d, issued in cycle %d\n", o_second_instruction->pc, o_second_instruction->cycle_issued);
                 break;
             }
         }
@@ -1134,6 +1165,43 @@ uint8_t check_if_can_exit(reservation_station_t *reservation_stations, configura
     return 1;
 }
 
+void free_reservation_stations(processor_t *processor)
+{
+    uint32_t nr_reservation =
+        processor->conf.add_nr_reservation +
+        processor->conf.mul_nr_reservation +
+        processor->conf.div_nr_reservation;
+
+    for (uint32_t i = 0; i < nr_reservation; ++i)
+    {
+        if (processor->reservation_stations[i].busy == 0 && processor->reservation_stations[i].was_freed_in_this_cycle == 1)
+        {
+            processor->reservation_stations[i].was_freed_in_this_cycle = 0;
+        }
+
+        if (processor->reservation_stations[i].cant_start_in_this_cycle == 1)
+        {
+            processor->reservation_stations[i].cant_start_in_this_cycle = 0;
+        }
+    }
+}
+
+void free_cdbs(processor_t *processor)
+{
+    if (processor->cdb_add.busy == 0 && processor->cdb_add.was_freed_in_this_cycle == 1)
+    {
+        processor->cdb_add.was_freed_in_this_cycle = 0;
+    }
+    if (processor->cdb_mul.busy == 0 && processor->cdb_mul.was_freed_in_this_cycle == 1)
+    {
+        processor->cdb_mul.was_freed_in_this_cycle = 0;
+    }
+    if (processor->cdb_div.busy == 0 && processor->cdb_div.was_freed_in_this_cycle == 1)
+    {
+        processor->cdb_div.was_freed_in_this_cycle = 0;
+    }
+}
+
 /**
  * @brief Runs the processor to execute instructions.
  *
@@ -1145,16 +1213,18 @@ uint8_t check_if_can_exit(reservation_station_t *reservation_stations, configura
  * @param processor Pointer to the processor structure.
  * @param instructions Array of instructions to be executed.
  */
-void run_processor(processor_t *processor, instruction_t *instructions)
+void run_processor(processor_t *processor, instruction_t *instructions,char *tracecdb_name, char *traceinst_name, char *regout_name)
 {
     // open the file to write the traceinst file
-    FILE *tracecdb_file = fopen("tracecdb.txt", "w");
+    FILE *tracecdb_file = NULL;
+    errno_t tracecdb_file_err = 0;
+    tracecdb_file_err = fopen_s(&tracecdb_file, tracecdb_name, "w");
     if (tracecdb_file == NULL)
     {
         printf("Failed to open traceinst file!\n");
         exit(1);
     }
-    uint32_t cycle = 0;
+    uint32_t cycle = 1;
 
     instruction_t first_instruction, second_instruction;
     init_instruction(&first_instruction);
@@ -1186,6 +1256,7 @@ void run_processor(processor_t *processor, instruction_t *instructions)
         if (processor->halted == 1)
         {
             ++cycle;
+            free_reservation_stations(processor);
             if (check_if_can_exit(processor->reservation_stations, processor->conf) == 1)
             {
                 break;
@@ -1215,18 +1286,24 @@ void run_processor(processor_t *processor, instruction_t *instructions)
 
         init_instruction(&first_instruction);
         init_instruction(&second_instruction);
+        free_reservation_stations(processor);
+        free_cdbs(processor);
         set_pending_register_to_busy(processor->reg);
         ++cycle;
     }
     // open file tranceinst to write the traceinst file
-    FILE *traceinst_file = fopen("traceinst.txt", "w");
+     FILE *traceinst_file = NULL;
+    errno_t traceinst_file_err = 0;
+    traceinst_file_err = fopen_s(&traceinst_file, traceinst_name, "w");
     if (traceinst_file == NULL)
     {
         printf("Failed to open traceinst file!\n");
         exit(1);
     }
     // open file regout to write the regout file
-    FILE *regout_file = fopen("regout.txt", "w");
+    FILE *regout_file = NULL;
+    errno_t regout_file_err = 0;
+    regout_file_err = fopen_s(&regout_file, regout_name, "w");
     if (regout_file == NULL)
     {
         printf("Failed to open regout file!\n");
@@ -1258,6 +1335,9 @@ int main(int argc, char *argv[])
         //argv[0] = "TomasuloSimulator.exe";
         //argv[1] = "cfg.txt";
         //argv[2] = "memin.txt";
+        //argv[3] = "regout.txt";
+        //argv[4] = "traceinst.txt";
+        //argv[5] = "tracecdb.txt";
         printf("Wrong param num %d, should be 3.\n", argc);
         return 1;
     }
@@ -1307,7 +1387,7 @@ int main(int argc, char *argv[])
     fclose(memin_file);
 
     init_processor(&processor, configs);
-    run_processor(&processor, instructions);
+    run_processor(&processor, instructions ,argv[5], argv[4], argv[3]);
     return 0;
 }
 
