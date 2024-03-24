@@ -31,7 +31,7 @@
 typedef struct {
     uint32_t cdb_id;        // Identifier for the CDB (ADD, MUL, DIV)
     uint32_t station_id;    // The identifier of the reservation station that sent the data
-    uint32_t output;        // output transmitted on the CDB
+    float output;        // output transmitted on the CDB
     uint32_t busy;          // Flag indicating if the station is busy (1) or available (0)
     uint32_t cycle;         // The cycle in which the data is being delivered
     uint32_t pc;            // The program counter of the instruction whose execution resulted in writing to the CDB
@@ -50,8 +50,8 @@ typedef struct {
     uint32_t busy;          // Flag indicating if the station is busy (1) or available (0)
     uint32_t ins;           // instruction number
     uint32_t op;            // Operation to be performed (e.g., ADD, MUL, DIV)
-    uint32_t vj;            // Value of operand j
-    uint32_t vk;            // Value of operand k
+    float vj;            // Value of operand j
+    float vk;            // Value of operand k
     uint32_t qj;            // Reservation station producing Vj
     uint32_t qk;            // Reservation station producing Vk
     uint32_t start_cycle;   // The cycle in which the current instruction has started to execute. Relevant only if busy=1. If value is 0, the instruction has not started yet.
@@ -159,6 +159,7 @@ void init_instruction(instruction_t* o_instruction)
     o_instruction->reservation_station = NULL;
 }
 
+
 void init_reservation_station(reservation_station_t* reservation_station, uint32_t station_id)
 {
     reservation_station->station_id = station_id;
@@ -195,7 +196,7 @@ void init_processor(processor_t* processor, configurations_t configs/*, uint32_t
     for (int i = 0; i < 16; i++)
     {
         processor->reg[i].q_i = 0;
-        processor->reg[i].v_i = float(i);
+        processor->reg[i].v_i = (float)i;
         processor->reg[i].busy = 0;
     }
 
@@ -498,8 +499,6 @@ int write_tracecdb_file() {
 
 void fetch_instructions(instruction_t** instructions, processor_t* processor)
 {
-    printf("que_size: %d\n", processor->instruction_que_size);
-
     // Instruction queue is full - nothing to do
     if (processor->instruction_que_size == INSTRUCTION_QUEUE_SIZE)
     {
@@ -578,6 +577,7 @@ void start_execution_if_possible(processor_t* processor, uint32_t cycle) {
             }
             
             processor->units[j].busy = 1;
+            processor->units[j].pc = processor->reservation_stations[i].ins;
             break;
         }
         
@@ -630,7 +630,7 @@ uint8_t execute_task_if_finished_and_get_result(uint32_t cycle, reservation_stat
         break;
     }
 
-    // TODO check that >= is not buggy
+    // TODO check that >= is not buggy  
     if (cycle >= reservation_station.start_cycle + delay && cdb->busy == 0)
     {
         cdb->busy = 1;
@@ -718,6 +718,7 @@ void write_cdb(processor_t* processor, uint32_t cycle, cdb_t* cdb)
         {
             processor->reg[k].v_i = result;
             processor->reg[k].q_i = 0;
+            processor->reg[k].busy = 0;
         }
     }
 
@@ -730,14 +731,14 @@ void write_cdb(processor_t* processor, uint32_t cycle, cdb_t* cdb)
             break;
         }
     }
-
+    uint32_t start_cycle = processor->reservation_stations[sending_station_id - 1].ins;
     // empty reservation station
     printf("insturction %d, set reservation station %d to NOT busy\n", pc, sending_station_id);
 
     // TODO should we do this here?
     init_reservation_station(&(processor->reservation_stations[sending_station_id-1]), sending_station_id);
 
-    printf("write_cdb: cycle=%d, result=%f from station id %d from instruction number %d\n", cycle, result, sending_station_id, pc);
+    printf("write_cdb: cycle=%d, result=%f from station id %d from instruction number %d. started in cycle: %d\n", cycle, result, sending_station_id, pc, start_cycle);
 }
 
 
@@ -852,6 +853,12 @@ void issue_instructions(processor_t* processor, instruction_t* o_first_instructi
             o_first_instruction->cycle_issued = current_cycle;
             break;
         }
+    }
+
+    // Issue must be done in-order
+    if (num_instructions_issued == 0)
+    {
+        return;
     }
 
     // there was only one instruction to issue, don't issue another one
@@ -978,7 +985,7 @@ void run_processor(processor_t* processor, instruction_t* instructions)
         //execute(processor);
         
         //write_tracecdb_file(cycle);
-    
+        
         // if got halted, continue execution loop but don't fetch and issue new instructions.
         // loop until there are no more instructions to issue
         if (processor->halted == 1)
