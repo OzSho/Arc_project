@@ -55,6 +55,7 @@ typedef struct {
     uint32_t qj;            // Reservation station producing Vj
     uint32_t qk;            // Reservation station producing Vk
     uint32_t start_cycle;   // The cycle in which the current instruction has started to execute. Relevant only if busy=1. If value is 0, the instruction has not started yet.
+    uint8_t was_freed_in_this_cycle; // indicates whether the station was freed in this cycle, so it's not yet available for use. Value 1 means true.
 } reservation_station_t;
 
 typedef struct {
@@ -171,6 +172,7 @@ void init_reservation_station(reservation_station_t* reservation_station, uint32
     reservation_station->qj = 0;
     reservation_station->qk = 0;
     reservation_station->start_cycle = 0;
+    reservation_station->was_freed_in_this_cycle = 0;
 }
 
 void init_unit(unit_t* unit, uint32_t cdb_id)
@@ -631,7 +633,7 @@ uint8_t execute_task_if_finished_and_get_result(uint32_t cycle, reservation_stat
     }
 
     // TODO check that >= is not buggy  
-    if (cycle >= reservation_station.start_cycle + delay && cdb->busy == 0)
+    if (cycle >= reservation_station.start_cycle + delay - 1 && cdb->busy == 0)
     {
         cdb->busy = 1;
         cdb->pc = reservation_station.ins;
@@ -731,12 +733,13 @@ void write_cdb(processor_t* processor, uint32_t cycle, cdb_t* cdb)
             break;
         }
     }
-    uint32_t start_cycle = processor->reservation_stations[sending_station_id - 1].ins;
+    uint32_t start_cycle = processor->reservation_stations[sending_station_id - 1].start_cycle;
     // empty reservation station
     printf("insturction %d, set reservation station %d to NOT busy\n", pc, sending_station_id);
 
     // TODO should we do this here?
     init_reservation_station(&(processor->reservation_stations[sending_station_id-1]), sending_station_id);
+    processor->reservation_stations[sending_station_id - 1].was_freed_in_this_cycle = 1;
 
     printf("write_cdb: cycle=%d, result=%f from station id %d from instruction number %d. started in cycle: %d\n", cycle, result, sending_station_id, pc, start_cycle);
 }
@@ -843,14 +846,19 @@ void issue_instructions(processor_t* processor, instruction_t* o_first_instructi
     get_reservation_stations_indices_by_opcode(processor->instruction_que[0].opcode, processor->conf, &start_point, &end_point, &(processor->halted));
     for (uint32_t i = start_point; i < end_point; ++i)
     {
-        if (processor->reservation_stations[i].busy == 0)
+        if (processor->reservation_stations[i].busy == 0 && processor->reservation_stations[i].was_freed_in_this_cycle == 0)
         {
             *o_first_instruction = processor->instruction_que[0];
             printf("insturction %d, set reservation station %d to busy\n", o_first_instruction->pc, processor->reservation_stations[i].station_id);
             processor->reservation_stations[i].busy = 1;
             o_first_instruction->reservation_station = &processor->reservation_stations[i];
+            if (o_first_instruction->pc == 12)
+            {
+                printf("HERE\n");
+            }
             ++num_instructions_issued;
             o_first_instruction->cycle_issued = current_cycle;
+            printf("insturction %d, issued in cycle %d\n", o_first_instruction->pc, o_first_instruction->cycle_issued);
             break;
         }
     }
@@ -867,7 +875,7 @@ void issue_instructions(processor_t* processor, instruction_t* o_first_instructi
         get_reservation_stations_indices_by_opcode(processor->instruction_que[1].opcode, processor->conf, &start_point, &end_point, &(processor->halted));
         for (uint32_t i = start_point; i < end_point; ++i)
         {
-            if (processor->reservation_stations[i].busy == 0)
+            if (processor->reservation_stations[i].busy == 0 && processor->reservation_stations[i].was_freed_in_this_cycle == 0)
             {
                 *o_second_instruction = processor->instruction_que[1];
                 printf("insturction %d, set reservation station %d to busy\n", o_second_instruction->pc, processor->reservation_stations[i].station_id);
@@ -875,6 +883,7 @@ void issue_instructions(processor_t* processor, instruction_t* o_first_instructi
                 o_second_instruction->reservation_station = &processor->reservation_stations[i];
                 ++num_instructions_issued;
                 o_second_instruction->cycle_issued = current_cycle;
+                printf("insturction %d, issued in cycle %d\n", o_second_instruction->pc, o_second_instruction->cycle_issued);
                 break;
             }
         }
@@ -957,9 +966,25 @@ uint8_t check_if_can_exit(reservation_station_t* reservation_stations, configura
     return 1;
 }
 
+void free_reservation_stations(processor_t* processor)
+{
+    uint32_t nr_reservation =
+        processor->conf.add_nr_reservation +
+        processor->conf.mul_nr_reservation +
+        processor->conf.div_nr_reservation;
+
+    for (uint32_t i = 0; i < nr_reservation; ++i)
+    {
+        if (processor->reservation_stations[i].busy == 0 && processor->reservation_stations[i].was_freed_in_this_cycle == 1)
+        {
+            processor->reservation_stations[i].was_freed_in_this_cycle == 1;
+        }
+    }
+}
+
 void run_processor(processor_t* processor, instruction_t* instructions)
 {
-    uint32_t cycle = 0;
+    uint32_t cycle = 1;
 
     instruction_t first_instruction, second_instruction;
     init_instruction(&first_instruction);
@@ -1003,6 +1028,8 @@ void run_processor(processor_t* processor, instruction_t* instructions)
 
         assign_instruction_to_reservation_station(processor, first_instruction);
         assign_instruction_to_reservation_station(processor, second_instruction);
+        
+        free_reservation_stations(processor);
 
         init_instruction(&first_instruction);
         init_instruction(&second_instruction);
